@@ -1,5 +1,8 @@
-const { app, BrowserWindow, WebContentsView, ipcMain } = require('electron')
+const { app, BrowserWindow, WebContentsView, ipcMain, protocol, net } = require('electron')
 const path = require('path')
+const fs = require('fs')
+const { pathToFileURL } = require('url')
+protocol.registerSchemesAsPrivileged([{ scheme: 'qat', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 app.commandLine.appendSwitch('process-per-site')
 app.commandLine.appendSwitch('renderer-process-limit', '6')
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,BackForwardCache')
@@ -44,7 +47,7 @@ function cycle(d) {
 }
 
 function attach(tab) {
-  const view = tab.view = new WebContentsView({ webPreferences: { backgroundThrottling: true, spellcheck: false, sandbox: true } })
+  const view = tab.view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'tab-preload.js'), backgroundThrottling: true, spellcheck: false, sandbox: true } })
   view.setBorderRadius?.(12)
   const wc = view.webContents
   const sync = () => { tab.url = wc.getURL() || tab.url; tab.loading = wc.isLoading(); tab.canGoBack = wc.navigationHistory.canGoBack(); tab.canGoForward = wc.navigationHistory.canGoForward(); sendTabs() }
@@ -131,9 +134,17 @@ ipcMain.on('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize(
 ipcMain.on('win:close', () => win.close())
 ipcMain.on('ui:ready', () => sendTabs())
 
-require('./ai').setup(ipcMain)
+require('./ai').setup(ipcMain, () => win.webContents)
+
+function qatFile(req) {
+  const u = new URL(req.url), p = decodeURIComponent(u.pathname), ui = path.join(__dirname, 'ui'), pages = path.join(__dirname, 'pages')
+  const shared = p.startsWith('/shared/'), base = shared ? ui : pages
+  const f = path.resolve(base, shared ? p.slice(8) : u.hostname + (p === '/' ? '/index.html' : p))
+  return f.startsWith(base + path.sep) && fs.existsSync(f) && fs.statSync(f).isFile() ? f : null
+}
 
 app.whenReady().then(() => {
+  protocol.handle('qat', req => { const f = qatFile(req); return f ? net.fetch(pathToFileURL(f).toString()) : new Response('Not found', { status: 404 }) })
   createWindow()
   setInterval(() => sleepTabs(false), 60000)
   setInterval(() => send('mem', Math.round(app.getAppMetrics().reduce((s, m) => s + m.memory.workingSetSize, 0) / 1024)), 5000)
