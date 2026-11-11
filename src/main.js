@@ -66,7 +66,7 @@ function attach(tab) {
 function push(image) {
   const s = image.getSize().width / pw
   let c = image.crop({ x: 0, y: 0, width: Math.round(pw * s), height: Math.round(STRIP * s) })
-  if (s > 1) c = c.resize({ width: pw, height: STRIP })
+  c = c.resize({ width: Math.round(pw / 2), height: STRIP / 2, quality: 'good' }) // half res = 4x less IPC so it keeps up at 60fps, the glass softens it anyway
   const { width, height } = c.getSize()
   toBar('glass:frame', { width, height, data: c.toBitmap() })
 }
@@ -77,7 +77,7 @@ function watch(tab) {
   tab.view.webContents.beginFrameSubscription(false, image => {
     if (win.isMinimized() || !win.isVisible()) return
     const now = Date.now()
-    if (now - lastFrame < 33) { clearTimeout(trail); trail = setTimeout(() => snap(tab), 50); return }
+    if (now - lastFrame < 14) { clearTimeout(trail); trail = setTimeout(() => snap(tab), 30); return }
     lastFrame = now
     push(image)
   })
