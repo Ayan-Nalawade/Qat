@@ -1,4 +1,4 @@
-const { app, BaseWindow, WebContentsView, ipcMain, protocol, net, screen } = require('electron')
+const { app, components, BaseWindow, WebContentsView, ipcMain, protocol, net, screen } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -219,7 +219,8 @@ function qatFile(req) {
   return f.startsWith(base + path.sep) && fs.existsSync(f) && fs.statSync(f).isFile() ? f : null
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await components.whenReady().catch(e => console.warn('widevine: ' + e.message)) // castlabs build fetches the cdm on first run so drm video plays
   protocol.handle('qat', req => { const f = qatFile(req); return f ? net.fetch(pathToFileURL(f).toString()) : new Response('Not found', { status: 404 }) })
   block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   createWindow()
