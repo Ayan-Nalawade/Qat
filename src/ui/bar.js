@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s)
 const omni = $('#omnibox'), tabsEl = $('#tabs'), cv = $('#gl')
-const MAX = 32
+const MAX = 32, BH = 52
 let state = { tabs: [], activeId: null }
 const X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'
 
@@ -24,6 +24,11 @@ function render() {
   $('#reload').classList.toggle('loading', cur.loading)
   $('#loadbar').classList.toggle('on', cur.loading)
   if (document.activeElement !== omni) omni.value = cur.url
+  const sh = $('#shield'), web = /^https?:/.test(cur.url)
+  sh.classList.toggle('na', !web)
+  sh.classList.toggle('off', !cur.shield)
+  sh.title = cur.shield ? cur.blocked + ' ads and trackers blocked. Click to allow ads on this site' : 'Ad blocker off for this site. Click to turn it back on'
+  $('#shield-n').textContent = cur.shield && cur.blocked ? (cur.blocked > 999 ? '999+' : cur.blocked) : ''
   watchRects()
 }
 
@@ -33,9 +38,63 @@ qat.on('side', open => $('#ai-toggle').classList.toggle('on', open))
 qat.on('focus-omnibox', () => { omni.focus(); omni.select() })
 qat.on('maximized', m => { $('#w-max').title = m ? 'Restore' : 'Maximize' })
 
-omni.addEventListener('keydown', e => { if (e.key === 'Enter' && omni.value.trim()) { qat.go(omni.value); omni.blur() } else if (e.key === 'Escape') omni.blur() })
+const drop = $('#drop'), looksUrl = s => /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^localhost(:\d+)?([/?#]|$)/i.test(s) || (!/\s/.test(s) && s.includes('.'))
+const ICON = { url: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>', search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>' }
+const gsearch = q => 'https://www.google.com/search?q=' + encodeURIComponent(q), bare = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
+let sugg = [], sel = -1, typed = '', seq = 0, gt
+
+function show(list) {
+  sugg = list.slice(0, 8); sel = -1
+  drop.innerHTML = ''
+  for (const s of sugg) {
+    const el = document.createElement('div')
+    el.className = 'sg'
+    el.innerHTML = ICON[s.kind] + '<span class="t"></span><span class="u"></span>'
+    el.querySelector('.t').textContent = s.title || s.text
+    el.querySelector('.u').textContent = s.title ? s.text : ''
+    el.onmousedown = e => { e.preventDefault(); go(s) }
+    drop.append(el)
+  }
+  drop.hidden = !sugg.length
+  const r = $('#omni').getBoundingClientRect()
+  Object.assign(drop.style, { left: r.x + 'px', width: r.width + 'px' })
+  drop.dataset.tone = $('#omni').dataset.tone || 'dark'
+  qat.barHeight(sugg.length ? Math.ceil(drop.getBoundingClientRect().bottom) + 16 : BH)
+}
+
+function build(m, g = []) {
+  const v = omni.value, list = [looksUrl(v) ? { kind: 'url', text: v, url: v } : { kind: 'search', text: v, title: v + ' - Google Search', url: gsearch(v) }], seen = new Set([bare(v)])
+  for (const h of m.items) if (!seen.has(bare(h.url))) { seen.add(bare(h.url)); list.push({ kind: 'url', text: bare(h.url), title: h.title, url: h.url }) }
+  for (const q of g) if (q !== typed) list.push({ kind: 'search', text: q, url: gsearch(q) })
+  return list
+}
+
+function go(s) { qat.go(s.url); omni.blur() }
+
+omni.addEventListener('input', async e => {
+  typed = omni.value
+  const my = ++seq, del = e.inputType?.startsWith('delete')
+  clearTimeout(gt)
+  if (!typed.trim()) return show([])
+  const m = await qat.match(typed)
+  if (my !== seq) return
+  if (!del && m.inline.toLowerCase().startsWith(typed.toLowerCase()) && m.inline.length > typed.length && omni.value === typed) { omni.value = typed + m.inline.slice(typed.length); omni.setSelectionRange(typed.length, omni.value.length) }
+  show(build(m))
+  gt = setTimeout(() => qat.search(typed).then(g => my === seq && show(build(m, g))), 120)
+})
+omni.addEventListener('keydown', e => {
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && sugg.length) {
+    e.preventDefault()
+    sel = (sel + (e.key === 'ArrowDown' ? 2 : 0) + sugg.length) % (sugg.length + 1) - 1
+    drop.querySelectorAll('.sg').forEach((el, i) => el.classList.toggle('hi', i === sel))
+    omni.value = sel < 0 ? typed : sugg[sel].kind === 'url' ? sugg[sel].url : sugg[sel].text
+  } else if (e.key === 'Enter' && omni.value.trim()) { sel >= 0 ? go(sugg[sel]) : qat.go(omni.value); omni.blur() }
+  else if (e.key === 'Escape') { if (sugg.length) { show([]); omni.value = typed } else omni.blur() }
+})
 omni.addEventListener('focus', () => omni.select())
-omni.addEventListener('blur', () => state.activeId && render())
+omni.addEventListener('blur', () => { seq++; clearTimeout(gt); show([]); state.activeId && render() })
+addEventListener('mousedown', e => (e.target === document.body || e.target === document.documentElement) && omni.blur())
+$('#shield').onclick = qat.shield
 $('#back').onclick = qat.back
 $('#forward').onclick = qat.forward
 $('#reload').onclick = qat.reload
@@ -125,7 +184,7 @@ function watchRects() {
 
 function tones() {
   if (!bits) return
-  const sx = bits.w / innerWidth, sy = bits.h / innerHeight
+  const sx = bits.w / innerWidth, sy = bits.h / BH
   for (const it of items) {
     let sum = 0, n = 0
     for (let y = Math.max(0, Math.floor(it.y * sy)); y < Math.min(bits.h, (it.y + it.h) * sy); y += 4)
@@ -143,7 +202,7 @@ function tones() {
 function draw() {
   raf = 0
   dpr = devicePixelRatio
-  const W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr)
+  const W = Math.round(innerWidth * dpr), H = Math.round(BH * dpr)
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; gl.viewport(0, 0, W, H) }
   if (frame) {
     bits = { w: frame.width, h: frame.height, d: frame.data }
@@ -155,7 +214,7 @@ function draw() {
   tones()
   const rects = new Float32Array(MAX * 4), emph = new Float32Array(MAX), tone = new Float32Array(MAX)
   items.forEach((it, i) => { rects.set([it.x, it.y, it.w, it.h], i * 4); emph[i] = it.e; tone[i] = it.el.dataset.tone === 'light' ? 1 : 0 })
-  gl.uniform2f(U.u_res, innerWidth, innerHeight)
+  gl.uniform2f(U.u_res, innerWidth, BH)
   gl.uniform1f(U.u_dpr, dpr)
   gl.uniform1i(U.u_n, items.length)
   gl.uniform4fv(U.u_rect, rects)

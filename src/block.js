@@ -1,13 +1,35 @@
-const { session } = require('electron')
-const HOSTS = new Set(`doubleclick.net googlesyndication.com googleadservices.com google-analytics.com googletagservices.com adservice.google.com pagead2.googlesyndication.com
-amazon-adsystem.com adnxs.com adsrvr.org rubiconproject.com pubmatic.com openx.net casalemedia.com criteo.com criteo.net taboola.com outbrain.com
-sharethrough.com smaato.net 3lift.com triplelift.com yieldmo.com teads.tv adform.net smartadserver.com indexww.com lijit.com sovrn.com
-33across.com gumgum.com media.net contextweb.com districtm.io bidswitch.net spotxchange.com spotx.tv springserve.com freewheel.tv fwmrm.net
-360yield.com improvedigital.com turn.com mathtag.com rlcdn.com demdex.net krxd.net bluekai.com agkn.com crwdcntrl.net tapad.com
-omnitagjs.com adyoulike.com cootlogix.com programmaticx.ai kueez.com nextmillmedia.com krushmedia.com copper6.com servenobid.com nobid.io
-moatads.com adsafeprotected.com doubleverify.com quantserve.com scorecardresearch.com hotjar.com hotjar.io adlightning.com confiant-integrations.net
-onetag-sys.com sonobi.com undertone.com zemanta.com yahoo.net ads.yahoo.com advertising.com adtechus.com everesttech.net eyeota.net
-id5-sync.com liadm.com 1rx.io rtbhouse.com emxdgt.com richaudience.com seedtag.com connatix.com primis.tech aniview.com vidazoo.com
-minutemedia-prebid.com unrulymedia.com yieldlab.net adkernel.com e-planning.net ad.gt audienceexposure.com sitescout.com dotomi.com`.split(/\s+/))
-const blocked = h => { for (let i = h.indexOf('.'); i !== -1; h = h.slice(i + 1), i = h.indexOf('.')) if (HOSTS.has(h)) return true; return false }
-module.exports = () => session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (d, cb) => cb({ cancel: blocked(new URL(d.url).hostname) }))
+const { app, session, webContents } = require('electron')
+const { ElectronBlocker } = require('@ghostery/adblocker-electron')
+const fs = require('fs')
+const path = require('path')
+
+const dir = () => app.getPath('userData')
+const host = u => { try { return new URL(u).hostname.replace(/^www\./, '') } catch { return '' } }
+const counts = new Map()
+let allow = new Set(), onCount = () => {}
+try { allow = new Set(JSON.parse(fs.readFileSync(path.join(dir(), 'allow.json'), 'utf8'))) } catch {}
+
+const pageOf = id => { const wc = id && webContents.fromId(id); return wc ? host(wc.getURL()) : '' }
+const on = id => !allow.has(pageOf(id))
+
+async function start() {
+  const bin = path.join(dir(), 'adblock.bin')
+  try { if (Date.now() - fs.statSync(bin).mtimeMs > 7 * 864e5) fs.unlinkSync(bin) } catch {} // refresh lists weekly
+  const b = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch, { path: bin, read: fs.promises.readFile, write: fs.promises.writeFile })
+  const req = b.onBeforeRequest, css = b.onInjectCosmeticFilters // count unique urls, some pages retry one blocked url thousands of times
+  b.onBeforeRequest = (d, cb) => on(d.webContentsId) ? req(d, r => { if ((r.cancel || r.redirectURL) && d.webContentsId) { const c = counts.get(d.webContentsId) || counts.set(d.webContentsId, new Set()).get(d.webContentsId); c.size !== c.add(d.url).size && onCount() } cb(r) }) : cb({})
+  b.onInjectCosmeticFilters = (e, ...a) => on(e.sender.id) ? css(e, ...a) : undefined
+  b.enableBlockingInSession(session.defaultSession)
+}
+
+module.exports = {
+  start: cb => { onCount = cb; start().catch(e => console.warn('adblock: ' + e.message)) },
+  count: id => counts.get(id)?.size || 0,
+  reset: id => counts.delete(id),
+  enabled: url => !allow.has(host(url)),
+  toggle(url) {
+    const h = host(url)
+    allow.has(h) ? allow.delete(h) : allow.add(h)
+    fs.writeFileSync(path.join(dir(), 'allow.json'), JSON.stringify([...allow]))
+  },
+}

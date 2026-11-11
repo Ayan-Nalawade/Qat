@@ -3,6 +3,7 @@ const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { pathToFileURL } = require('url')
+const block = require('./block'), hist = require('./history')
 protocol.registerSchemesAsPrivileged([{ scheme: 'qat', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 app.commandLine.appendSwitch('process-per-site')
 app.commandLine.appendSwitch('renderer-process-limit', '6')
@@ -17,13 +18,13 @@ const SLEEP_MS = 3 * 60 * 1000
 const HOME = 'https://www.google.com'
 const tabs = new Map()
 const STRIP = 52, SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
-let win, bar, side, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
+let win, bar, side, barH = 52, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
 const send = (ch, ...a) => side?.webContents.send(ch, ...a)
 const ui = () => new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } })
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
 const toBar = (ch, ...a) => bar.webContents.send(ch, ...a)
-const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping })) })
+const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url) })) })
 const active = () => tabs.get(activeId)
 
 function toUrl(s) {
@@ -59,7 +60,9 @@ function attach(tab) {
   const view = tab.view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'tab-preload.js'), backgroundThrottling: true, spellcheck: false, sandbox: true } })
   const wc = view.webContents
   const sync = () => { tab.url = wc.getURL() || tab.url; tab.loading = wc.isLoading(); tab.canGoBack = wc.navigationHistory.canGoBack(); tab.canGoForward = wc.navigationHistory.canGoForward(); sendTabs() }
-  wc.on('page-title-updated', (e, t) => { tab.title = t; sync() })
+  wc.on('page-title-updated', (e, t) => { tab.title = t; hist.title(wc.getURL(), t); sync() })
+  wc.on('did-navigate', (e, u) => { hist.visit(u, tab.typed); tab.typed = false })
+  wc.on('did-start-navigation', e => e.isMainFrame && !e.isSameDocument && block.reset(wc.id))
   wc.on('page-favicon-updated', (e, f) => { tab.favicon = f[0]; sync() })
   for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page']) wc.on(ev, sync)
   keys(wc)
@@ -97,7 +100,7 @@ function layout() {
   const { width, height } = win.getContentBounds()
   pw = width - (sidebarOpen ? SIDE : 0)
   active()?.view?.setBounds({ x: 0, y: STRIP, width: pw, height: height - STRIP })
-  bar.setBounds({ x: 0, y: 0, width: pw, height: STRIP })
+  bar.setBounds({ x: 0, y: 0, width: pw, height: barH })
   side?.setBounds({ x: pw, y: 0, width: SIDE, height })
   side?.setVisible(sidebarOpen)
 }
@@ -178,7 +181,11 @@ function createWindow() {
 ipcMain.on('tab:new', (e, url) => newTab(url))
 ipcMain.on('tab:close', (e, id) => closeTab(id))
 ipcMain.on('tab:activate', (e, id) => activate(id))
-ipcMain.on('nav:go', (e, text) => active().view.webContents.loadURL(toUrl(text)).catch(() => {}))
+ipcMain.on('nav:go', (e, text) => { active().typed = true; active().view.webContents.loadURL(toUrl(text)).catch(() => {}) })
+ipcMain.on('bar:height', (e, h) => { barH = Math.max(STRIP, Math.min(h, win.getContentBounds().height)); layout() })
+ipcMain.on('shield:toggle', () => { const t = active(); block.toggle(t.url); block.reset(t.view.webContents.id); t.view.webContents.reload(); sendTabs() })
+ipcMain.handle('omni:match', (e, q) => hist.match(q))
+ipcMain.handle('omni:search', (e, q) => fetch('https://suggestqueries.google.com/complete/search?client=chrome&q=' + encodeURIComponent(q), { signal: AbortSignal.timeout(1500) }).then(r => r.json()).then(j => j[1].slice(0, 5)).catch(() => []))
 ipcMain.on('nav:back', () => active().view.webContents.navigationHistory.goBack())
 ipcMain.on('nav:forward', () => active().view.webContents.navigationHistory.goForward())
 ipcMain.on('nav:reload', () => { const wc = active().view.webContents; wc.isLoading() ? wc.stop() : wc.reload() })
@@ -214,7 +221,7 @@ function qatFile(req) {
 
 app.whenReady().then(() => {
   protocol.handle('qat', req => { const f = qatFile(req); return f ? net.fetch(pathToFileURL(f).toString()) : new Response('Not found', { status: 404 }) })
-  require('./block')()
+  block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   createWindow()
   setInterval(() => sleepTabs(false), 60000)
   setInterval(meter, 5000)
