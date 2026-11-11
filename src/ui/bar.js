@@ -63,15 +63,18 @@ precision highp float;
 uniform vec2 u_res; uniform float u_dpr; uniform int u_n; uniform vec4 u_rect[${MAX}]; uniform float u_emph[${MAX}]; uniform float u_tone[${MAX}]; uniform sampler2D u_tex;
 out vec4 o;
 float sdf(vec2 p, vec4 r) { vec2 b = r.zw * .5; float rad = min(b.x, b.y); vec2 q = abs(p - r.xy - b) - (b - rad); return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - rad; }
-vec3 tx(vec2 p) { return texture(u_tex, clamp(p / u_res, 0., 1.)).bgr; }
+vec3 tx(vec2 p) { return texture(u_tex, clamp(vec2(p.x, u_res.y - p.y) / u_res, 0., 1.)).bgr; } // page top mirrored up into the bar, like apple's background extension
+vec3 blur(vec2 p, float r) { return textureLod(u_tex, clamp(vec2(p.x, u_res.y - p.y) / u_res, 0., 1.), log2(r) - 1.).bgr; } // mip levels = smooth cheap blur, texture is half res
 void main() {
   vec2 p = vec2(gl_FragCoord.x, u_res.y * u_dpr - gl_FragCoord.y) / u_dpr;
   float best = 1e5; int k = -1;
   for (int i = 0; i < ${MAX}; i++) { if (i >= u_n) break; float s = sdf(p, u_rect[i]); if (s < best) { best = s; k = i; } }
-  if (k < 0 || best > 9.) { o = vec4(0); return; }
+  vec3 bg = blur(p, 11.);
+  bg = mix(bg, blur(p, 24.), .6);
+  if (k < 0) { o = vec4(bg, 1); return; }
   vec4 r = u_rect[k]; float e = u_emph[k], tn = u_tone[k];
-  float sh = pow(1. - clamp(best / 9., 0., 1.), 2.) * (.10 + .12 * tn) * step(0., best); // soft drop shadow so capsules read on white pages
-  if (best > .5) { o = vec4(0, 0, 0, sh); return; }
+  bg *= 1. - pow(1. - clamp(best / 9., 0., 1.), 2.) * (.14 + .12 * tn) * step(0., best);
+  if (best > .5) { o = vec4(bg, 1); return; }
   float cov = clamp(.5 - best, 0., 1.), d = max(-best, 0.);
   vec2 h = vec2(.5, 0.);
   vec2 n = normalize(vec2(sdf(p + h.xy, r) - sdf(p - h.xy, r), sdf(p + h.yx, r) - sdf(p - h.yx, r)) + 1e-5);
@@ -79,22 +82,24 @@ void main() {
   vec3 c = vec3(0);
   for (int j = 0; j < 9; j++) { vec2 q = vec2(float(j % 3) - 1., float(j / 3) - 1.) * 2.4; c += vec3(tx(p - off + q).r, tx(p - off * 1.05 + q).g, tx(p - off * 1.1 + q).b); }
   c /= 9.;
+  c = mix(c, blur(p, 14.), .45); // wide average stops one small bright button flooding the whole capsule
   c = mix(vec3(dot(c, vec3(.299, .587, .114))), c, 1.15 + .06 * e);
-  c = mix(c, mix(vec3(.08, .09, .12), vec3(1.), tn), .3 + .05 * e);
+  c = mix(c, mix(vec3(.08, .09, .12), vec3(1.), tn), .45 + .05 * e);
   float L = dot(n, normalize(vec2(-1., -1.)));
   float spec = (1. - smoothstep(0., 1.8, d)) * (.25 + .6 * max(L, 0.) + .25 * max(-L, 0.)) * (1. + .5 * e);
   float glow = pow(1. - clamp(d / 8., 0., 1.), 3.) * .12 * max(L, 0.);
   c += spec + glow + .05 * (1. - (p.y - r.y) / r.w);
   c = mix(c, c * .82, (1. - smoothstep(0., 1.2, d)) * tn); // darker rim edge on light backdrops
-  o = vec4(clamp(c, 0., 1.) * cov, cov);
+  o = vec4(mix(bg, clamp(c, 0., 1.), cov), 1);
 }`))
   gl.linkProgram(pr)
   gl.useProgram(pr)
   for (const n of ['u_res', 'u_dpr', 'u_n', 'u_rect', 'u_emph', 'u_tone', 'u_tex']) U[n] = gl.getUniformLocation(pr, n)
   tex = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, tex)
-  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v)
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([46, 38, 38, 255]))
+  gl.generateMipmap(gl.TEXTURE_2D)
   tw = th = 1
   gl.uniform1i(U.u_tex, 0)
   gl.enable(gl.BLEND)
@@ -145,6 +150,7 @@ function draw() {
     frame = null
     if (tw === bits.w && th === bits.h) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, tw, th, gl.RGBA, gl.UNSIGNED_BYTE, bits.d)
     else { tw = bits.w; th = bits.h; gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tw, th, 0, gl.RGBA, gl.UNSIGNED_BYTE, bits.d) }
+    gl.generateMipmap(gl.TEXTURE_2D)
   }
   tones()
   const rects = new Float32Array(MAX * 4), emph = new Float32Array(MAX), tone = new Float32Array(MAX)

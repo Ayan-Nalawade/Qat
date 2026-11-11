@@ -87,7 +87,7 @@ function watch(tab) {
 function layout() {
   const { width, height } = win.getContentBounds()
   pw = width - (sidebarOpen ? SIDE : 0)
-  active()?.view?.setBounds({ x: 0, y: 0, width: pw, height })
+  active()?.view?.setBounds({ x: 0, y: STRIP, width: pw, height: height - STRIP })
   bar.setBounds({ x: 0, y: 0, width: pw, height: STRIP })
 }
 
