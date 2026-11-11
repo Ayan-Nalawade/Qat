@@ -34,22 +34,12 @@
     <aside id="side" class="glass">
       <div id="chat-head">
         <h2>Assistant</h2>
-        <span id="chat-prov"></span>
+        <button id="chat-prov" title="Choose model"></button>
         <button id="chat-new" class="btn" title="New chat"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
         <button id="chat-set" class="btn" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       </div>
       <div id="chat-msgs"></div>
-      <form id="chat-cfg" hidden>
-        <label>Provider<select id="cfg-prov"></select></label>
-        <label>Base URL<input id="cfg-base" type="text" spellcheck="false" autocomplete="off"></label>
-        <label>Model<input id="cfg-model" type="text" list="cfg-models" spellcheck="false" autocomplete="off"></label>
-        <datalist id="cfg-models"></datalist>
-        <button type="button" id="cfg-load" class="link">Load models</button>
-        <label>API key<input id="cfg-key" type="password" autocomplete="off"></label>
-        <button type="button" id="cfg-clear" class="link">Clear key</button>
-        <div id="cfg-note"></div>
-        <button type="submit" id="cfg-save">Save</button>
-      </form>
+      <div id="chat-pick" hidden></div>
       <div id="chat-composer">
         <textarea id="chat-in" rows="1" placeholder="Message" spellcheck="false"></textarea>
         <button id="chat-send" class="btn" title="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-halt" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
@@ -58,6 +48,7 @@
   </main>
 </div>
 <script src="app.js"></script>
+<script src="picker.js"></script>
 <script src="chat.js"></script>
 </body>
 </html>

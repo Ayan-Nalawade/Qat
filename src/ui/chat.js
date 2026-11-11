@@ -1,6 +1,6 @@
-const msgsEl = $('#chat-msgs'), cfgEl = $('#chat-cfg'), input = $('#chat-in'), sendBtn = $('#chat-send'), note = $('#cfg-note')
-const selProv = $('#cfg-prov'), inBase = $('#cfg-base'), inModel = $('#cfg-model'), inKey = $('#cfg-key')
-let cfg, msgs = [], streaming = false, rid = 0, err = '', lastEl = null, stick = true
+const msgsEl = $('#chat-msgs'), pickEl = $('#chat-pick'), input = $('#chat-in'), sendBtn = $('#chat-send')
+const sel = Object.assign(document.createElement('select'), { className: 'ctl' })
+let cache = {}, cfg, msgs = [], streaming = false, rid = 0, err = '', lastEl = null, stick = true
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
@@ -43,7 +43,7 @@ function empty() {
   const p = cfg.providers[cfg.provider]
   if (!p.hasKey && cfg.provider !== 'custom') {
     el.innerHTML = '<p>Add an API key for ' + esc(p.name) + ' to start chatting.</p><button class="pill">Open settings</button>'
-    el.querySelector('button').onclick = openCfg
+    el.querySelector('button').onclick = openSettings
   } else el.innerHTML = '<p>Ask anything.</p>'
   return el
 }
@@ -58,8 +58,7 @@ function draw() {
 }
 
 function label() {
-  const p = cfg.providers[cfg.provider]
-  $('#chat-prov').textContent = p.name + ' · ' + p.model
+  $('#chat-prov').textContent = cfg.providers[cfg.provider].model
 }
 
 function setStreaming(v) {
@@ -115,50 +114,35 @@ msgsEl.addEventListener('click', e => {
 input.addEventListener('input', grow)
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() } })
 sendBtn.onclick = () => streaming ? qat.ai.stop(rid) : send()
-$('#chat-new').onclick = () => { if (streaming) qat.ai.stop(rid); rid++; setStreaming(false); msgs = []; err = ''; closeCfg(); draw() }
+$('#chat-new').onclick = () => { if (streaming) qat.ai.stop(rid); rid++; setStreaming(false); msgs = []; err = ''; closePick(); draw() }
 $('#ai-toggle').addEventListener('click', () => { if ($('#side').classList.contains('open')) input.focus() })
 
-function fill() {
-  const p = cfg.providers[selProv.value]
-  inBase.value = p.base
-  inModel.value = p.model
-  inKey.value = ''
-  inKey.placeholder = p.hasKey ? 'saved' : 'paste key'
-  note.textContent = ''
-  note.className = ''
+const openSettings = () => qat.newTab('qat://settings')
+
+function showPick() {
+  const id = sel.value
+  qatPicker(pickEl, {
+    lead: sel, current: cfg.providers[id].model,
+    load: async () => cache[id] ||= await qat.ai.models(id),
+    onPick: async model => { cfg = await qat.ai.pick({ provider: id, model }); closePick(); label(); draw() },
+    onClose: closePick,
+    action: { label: 'Open settings', run: openSettings },
+  })
 }
 
-function openCfg() {
-  selProv.innerHTML = Object.entries(cfg.providers).map(([id, p]) => '<option value="' + id + '">' + esc(p.name) + '</option>').join('')
-  selProv.value = cfg.provider
-  fill()
+function openPick() {
+  sel.innerHTML = Object.entries(cfg.providers).map(([id, p]) => '<option value="' + id + '">' + esc(p.name) + (!p.hasKey && id !== 'custom' ? ' (no key)' : '') + '</option>').join('')
+  sel.value = cfg.provider
   msgsEl.hidden = true
-  cfgEl.hidden = false
+  pickEl.hidden = false
+  showPick()
 }
 
-function closeCfg() { cfgEl.hidden = true; msgsEl.hidden = false }
+function closePick() { pickEl.hidden = true; msgsEl.hidden = false }
 
-const payload = key => ({ provider: selProv.value, id: selProv.value, base: inBase.value, model: inModel.value, key })
-const msgOf = e => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
-
-async function persist(key) {
-  cfg = await qat.ai.save(payload(key))
-  label()
-}
-
-$('#chat-set').onclick = () => cfgEl.hidden ? openCfg() : closeCfg()
-selProv.onchange = fill
-$('#cfg-load').onclick = async () => {
-  note.className = ''
-  note.textContent = 'Loading...'
-  try {
-    await persist(inKey.value)
-    const ids = await qat.ai.models(selProv.value)
-    $('#cfg-models').innerHTML = ids.map(i => '<option value="' + esc(i) + '">').join('')
-    note.textContent = ids.length + ' models loaded'
-  } catch (e) { note.className = 'bad'; note.textContent = msgOf(e) }
-}
-$('#cfg-clear').onclick = async () => { await persist(null); fill(); draw() }
-cfgEl.onsubmit = async e => { e.preventDefault(); await persist(inKey.value); closeCfg(); draw() }
+sel.onchange = showPick
+$('#chat-prov').onclick = () => pickEl.hidden ? openPick() : closePick()
+$('#chat-set').onclick = openSettings
+qat.on('ai:changed', s => { cfg = s; cache = {}; label(); draw() })
 
 qat.ai.settings().then(s => { cfg = s; label(); draw() })

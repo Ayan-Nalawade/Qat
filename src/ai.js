@@ -22,27 +22,39 @@ function conf(id) {
 
 function pub() {
   const providers = {}
-  for (const id in PROVIDERS) { const c = conf(id); providers[id] = { name: PROVIDERS[id].name, base: c.base, model: c.model, hasKey: !!c.key } }
+  for (const id in PROVIDERS) { const c = conf(id); providers[id] = { name: PROVIDERS[id].name, defBase: PROVIDERS[id].base, base: c.base, model: c.model, hasKey: !!c.key } }
   return { provider: read().provider || 'nvidia', providers }
 }
 
 const headers = (id, c) => ({ 'Content-Type': 'application/json', ...(c.key && { Authorization: 'Bearer ' + c.key }), ...PROVIDERS[id].headers })
 
-function setup(ipcMain) {
+function setup(ipcMain, ui) {
   const runs = new Map()
+  const ok = e => e.sender === ui() || !!e.senderFrame?.url.startsWith('qat://')
+  const handle = (ch, f) => ipcMain.handle(ch, (e, ...a) => ok(e) ? f(e, ...a) : undefined)
+  const on = (ch, f) => ipcMain.on(ch, (e, ...a) => ok(e) && f(e, ...a))
+  const changed = () => { const p = pub(); ui().send('ai:changed', p); return p }
 
-  ipcMain.handle('ai:settings', () => pub())
+  handle('ai:settings', () => pub())
 
-  ipcMain.handle('ai:save', (e, { provider, id, base, model, key }) => {
+  handle('ai:pick', (e, { provider, model }) => {
+    const s = read()
+    s.provider = provider
+    s.providers = { ...s.providers, [provider]: { ...s.providers?.[provider], model } }
+    fs.writeFileSync(file(), JSON.stringify(s, null, 2))
+    return changed()
+  })
+
+  handle('ai:save', (e, { provider, id, base, model, key }) => {
     const s = read(), old = s.providers?.[id] || {}, d = PROVIDERS[id]
     s.provider = provider
     s.providers ||= {}
     s.providers[id] = { base: base.trim().replace(/\/+$/, '') || d.base, model: model.trim() || d.model, ...(key === null ? {} : key ? lock(key) : { key: old.key, enc: old.enc }) }
     fs.writeFileSync(file(), JSON.stringify(s, null, 2))
-    return pub()
+    return changed()
   })
 
-  ipcMain.handle('ai:models', async (e, id) => {
+  handle('ai:models', async (e, id) => {
     const c = conf(id)
     let r
     try { r = await fetch(c.base + '/models', { headers: headers(id, c) }) } catch (err) { throw new Error('Could not reach ' + c.base) }
@@ -51,7 +63,7 @@ function setup(ipcMain) {
     return (j.data || j).map(m => m.id).sort()
   })
 
-  ipcMain.on('ai:chat', async (e, { rid, messages }) => {
+  on('ai:chat', async (e, { rid, messages }) => {
     const id = pub().provider, c = conf(id), ac = new AbortController()
     runs.set(rid, ac)
     const out = (ch, d) => e.sender.isDestroyed() || e.sender.send(ch, { rid, ...d })
@@ -81,7 +93,7 @@ function setup(ipcMain) {
     runs.delete(rid)
   })
 
-  ipcMain.on('ai:stop', (e, rid) => runs.get(rid)?.abort())
+  on('ai:stop', (e, rid) => runs.get(rid)?.abort())
 }
 
 module.exports = { setup }
