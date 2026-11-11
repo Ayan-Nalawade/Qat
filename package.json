@@ -1,0 +1,14 @@
+{
+  "name": "qat",
+  "version": "0.1.0",
+  "description": "a lightweight chromium browser with a glass ui and ai chat",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "Ayan",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^45.3.0"
+  }
+}
