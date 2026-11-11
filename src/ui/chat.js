@@ -115,7 +115,6 @@ input.addEventListener('input', grow)
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() } })
 sendBtn.onclick = () => streaming ? qat.ai.stop(rid) : send()
 $('#chat-new').onclick = () => { if (streaming) qat.ai.stop(rid); rid++; setStreaming(false); msgs = []; err = ''; closePick(); draw() }
-$('#ai-toggle').addEventListener('click', () => { if ($('#side').classList.contains('open')) input.focus() })
 
 const openSettings = () => qat.newTab('qat://settings')
 

@@ -8,30 +8,7 @@
 </head>
 <body>
 <div id="app">
-  <header id="top">
-    <div id="tabstrip">
-      <div id="tabs"></div>
-      <button id="new-tab" class="btn" title="New tab (Ctrl+T)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-      <div id="drag"></div>
-      <div id="winctl">
-        <button id="w-min" title="Minimize"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
-        <button id="w-max" title="Maximize"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
-        <button id="w-close" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-    </div>
-    <div id="toolbar" class="glass">
-      <button id="back" class="btn" title="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-      <button id="forward" class="btn" title="Forward"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
-      <button id="reload" class="btn" title="Reload"><svg class="i-reload" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg><svg class="i-stop" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      <input id="omnibox" type="text" placeholder="Search or enter address" autocomplete="off" spellcheck="false">
-      <button id="mem" title="Memory used by Qat. Click to sleep background tabs"><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="10" rx="2"/><path d="M9 7V4M15 7V4M9 20v-3M15 20v-3"/></svg><span id="mem-val">0 MB</span></button>
-      <button id="ai-toggle" class="btn" title="Assistant"><span>AI</span></button>
-      <div id="loadbar"></div>
-    </div>
-  </header>
-  <main id="main">
-    <div id="viewport"></div>
-    <aside id="side" class="glass">
+  <aside id="side" class="glass">
       <div id="chat-head">
         <h2>Assistant</h2>
         <button id="chat-prov" title="Choose model"></button>
@@ -45,7 +22,6 @@
         <button id="chat-send" class="btn" title="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-halt" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
       </div>
     </aside>
-  </main>
 </div>
 <script src="app.js"></script>
 <script src="picker.js"></script>

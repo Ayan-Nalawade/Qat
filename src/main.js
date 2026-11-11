@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, protocol, net } = require('electron')
+const { app, BrowserWindow, WebContentsView, ipcMain, protocol, net, screen } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { pathToFileURL } = require('url')
@@ -14,10 +14,12 @@ process.on('warning', w => /Failed to load URL/.test(w.message) || console.warn(
 const SLEEP_MS = 5 * 60 * 1000
 const HOME = 'https://www.google.com'
 const tabs = new Map()
-let win, activeId = null, nextId = 1, rect = { x: 0, y: 0, width: 0, height: 0 }
+const STRIP = 52, SIDE = 376
+let win, bar, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, lastFrame = 0, trail
 
 const send = (ch, ...a) => win.webContents.send(ch, ...a)
-const sendTabs = () => send('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping })) })
+const toBar = (ch, ...a) => bar.webContents.send(ch, ...a)
+const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping })) })
 const active = () => tabs.get(activeId)
 
 function toUrl(s) {
@@ -42,7 +44,7 @@ function shortcut(input) {
   return true
 }
 
-function focusOmnibox() { win.webContents.focus(); send('focus-omnibox') }
+function focusOmnibox() { bar.webContents.focus(); toBar('focus-omnibox') }
 
 function cycle(d) {
   const ids = [...tabs.keys()]
@@ -51,7 +53,6 @@ function cycle(d) {
 
 function attach(tab) {
   const view = tab.view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'tab-preload.js'), backgroundThrottling: true, spellcheck: false, sandbox: true } })
-  view.setBorderRadius?.(12)
   const wc = view.webContents
   const sync = () => { tab.url = wc.getURL() || tab.url; tab.loading = wc.isLoading(); tab.canGoBack = wc.navigationHistory.canGoBack(); tab.canGoForward = wc.navigationHistory.canGoForward(); sendTabs() }
   wc.on('page-title-updated', (e, t) => { tab.title = t; sync() })
@@ -60,6 +61,34 @@ function attach(tab) {
   wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
   wc.setWindowOpenHandler(({ url }) => { newTab(url); return { action: 'deny' } })
   wc.loadURL(tab.url).catch(() => {})
+}
+
+function push(image) {
+  const s = image.getSize().width / pw
+  let c = image.crop({ x: 0, y: 0, width: Math.round(pw * s), height: Math.round(STRIP * s) })
+  if (s > 1) c = c.resize({ width: pw, height: STRIP })
+  const { width, height } = c.getSize()
+  toBar('glass:frame', { width, height, data: c.toBitmap() })
+}
+
+const snap = tab => tab === active() && tab.view?.webContents.capturePage({ x: 0, y: 0, width: pw, height: STRIP }).then(push, () => {})
+
+function watch(tab) {
+  tab.view.webContents.beginFrameSubscription(false, image => {
+    if (win.isMinimized() || !win.isVisible()) return
+    const now = Date.now()
+    if (now - lastFrame < 33) { clearTimeout(trail); trail = setTimeout(() => snap(tab), 50); return }
+    lastFrame = now
+    push(image)
+  })
+  snap(tab)
+}
+
+function layout() {
+  const { width, height } = win.getContentBounds()
+  pw = width - (sidebarOpen ? SIDE : 0)
+  active()?.view?.setBounds({ x: 0, y: 0, width: pw, height })
+  bar.setBounds({ x: 0, y: 0, width: pw, height: STRIP })
 }
 
 function newTab(url = HOME) {
@@ -71,13 +100,15 @@ function newTab(url = HOME) {
 
 function activate(id) {
   const prev = active()
-  if (prev && prev !== tabs.get(id) && prev.view) win.contentView.removeChildView(prev.view)
+  if (prev && prev !== tabs.get(id) && prev.view) { prev.view.webContents.endFrameSubscription(); win.contentView.removeChildView(prev.view) }
   activeId = id
   const tab = active()
   tab.lastActive = Date.now()
   if (tab.sleeping) { tab.sleeping = false; attach(tab) }
   win.contentView.addChildView(tab.view)
-  tab.view.setBounds(rect)
+  win.contentView.addChildView(bar)
+  layout()
+  watch(tab)
   tab.view.webContents.focus()
   sendTabs()
 }
@@ -85,7 +116,7 @@ function activate(id) {
 function closeTab(id) {
   const tab = tabs.get(id)
   const ids = [...tabs.keys()], i = ids.indexOf(id)
-  if (tab.view) { win.contentView.removeChildView(tab.view); tab.view.webContents.close() }
+  if (tab.view) { if (id === activeId) tab.view.webContents.endFrameSubscription(); win.contentView.removeChildView(tab.view); tab.view.webContents.close() }
   tabs.delete(id)
   if (!tabs.size) return newTab()
   if (id === activeId) activate([...tabs.keys()][Math.min(i, tabs.size - 1)])
@@ -116,9 +147,14 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
   })
   win.loadFile(path.join(__dirname, 'ui', 'index.html'))
-  win.webContents.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
-  win.on('maximize', () => send('maximized', true))
-  win.on('unmaximize', () => send('maximized', false))
+  bar = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } })
+  bar.setBackgroundColor('#00000000')
+  win.contentView.addChildView(bar)
+  bar.webContents.loadFile(path.join(__dirname, 'ui', 'bar.html'))
+  for (const wc of [win.webContents, bar.webContents]) wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
+  win.on('maximize', () => toBar('maximized', true))
+  win.on('unmaximize', () => toBar('maximized', false))
+  win.on('resize', layout)
   win.webContents.once('did-finish-load', () => newTab())
 }
 
@@ -129,9 +165,14 @@ ipcMain.on('nav:go', (e, text) => active().view.webContents.loadURL(toUrl(text))
 ipcMain.on('nav:back', () => active().view.webContents.navigationHistory.goBack())
 ipcMain.on('nav:forward', () => active().view.webContents.navigationHistory.goForward())
 ipcMain.on('nav:reload', () => { const wc = active().view.webContents; wc.isLoading() ? wc.stop() : wc.reload() })
-ipcMain.on('viewport:rect', (e, r) => { rect = { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }; active()?.view?.setBounds(rect) })
+ipcMain.on('side:toggle', () => {
+  sidebarOpen = !sidebarOpen
+  layout()
+  send('side', sidebarOpen)
+  toBar('side', sidebarOpen)
+  if (sidebarOpen) win.webContents.focus()
+})
 ipcMain.on('mem:sleep-all', () => sleepTabs(true))
-ipcMain.on('devtools', () => active().view.webContents.toggleDevTools())
 ipcMain.on('win:min', () => win.minimize())
 ipcMain.on('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize())
 ipcMain.on('win:close', () => win.close())
@@ -151,6 +192,6 @@ app.whenReady().then(() => {
   require('./block')()
   createWindow()
   setInterval(() => sleepTabs(false), 60000)
-  setInterval(() => send('mem', Math.round(app.getAppMetrics().reduce((s, m) => s + m.memory.privateBytes, 0) / 1024)), 5000)
+  setInterval(() => toBar('mem', Math.round(app.getAppMetrics().reduce((s, m) => s + m.memory.privateBytes, 0) / 1024)), 5000)
 })
 app.on('window-all-closed', () => app.quit())

@@ -1,0 +1,54 @@
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; background: transparent; -webkit-app-region: drag; user-select: none; font: 13px "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; }
+svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
+#gl { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#row { position: relative; height: 52px; padding: 8px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 42%) auto; gap: 6px; align-items: center; }
+#left, #mid, #right { display: flex; gap: 6px; min-width: 0; }
+#right { justify-content: flex-end; }
+#tabs { display: flex; gap: 6px; min-width: 0; flex: 0 1 auto; }
+
+.lg { --fg: #fff; --dim: rgba(255,255,255,.72); --sh: 0 1px 2px rgba(0,0,0,.45); --hov: rgba(255,255,255,.2); position: relative; display: flex; align-items: center; height: 36px; border-radius: 18px; color: var(--fg); text-shadow: var(--sh); -webkit-app-region: no-drag; transition: color .2s; flex: none; }
+.lg[data-tone="light"] { --fg: #0e1014; --dim: rgba(14,16,20,.62); --sh: 0 1px 1px rgba(255,255,255,.5); --hov: rgba(0,0,0,.12); }
+.lg svg { filter: drop-shadow(var(--sh)); }
+.ib { width: 30px; height: 30px; border-radius: 15px; display: grid; place-items: center; flex: none; -webkit-app-region: no-drag; }
+.ib:hover:not(:disabled) { background: var(--hov); }
+.ib:disabled { opacity: .35; }
+#new-tab { width: 36px; justify-content: center; color: var(--dim); }
+#new-tab:hover { color: var(--fg); }
+
+.tab { flex: 0 1 200px; min-width: 44px; gap: 8px; padding: 0 6px 0 13px; overflow: hidden; color: var(--dim); }
+.tab:hover, .tab.active { color: var(--fg); }
+.tab.sleeping { opacity: .55; }
+.tab .fav { width: 16px; height: 16px; border-radius: 4px; flex: none; object-fit: contain; }
+.tab .dot { width: 8px; height: 8px; margin: 4px; border-radius: 50%; background: currentColor; opacity: .6; flex: none; }
+.tab .spin { width: 14px; height: 14px; margin: 1px; border-radius: 50%; border: 2px solid var(--dim); border-top-color: var(--fg); animation: spin .8s linear infinite; flex: none; }
+.tab .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab .x { width: 22px; height: 22px; border-radius: 11px; display: grid; place-items: center; flex: none; opacity: 0; }
+.tab:hover .x, .tab.active .x { opacity: .85; }
+.tab .x:hover { background: var(--hov); opacity: 1; }
+.tab .x svg { width: 12px; height: 12px; }
+
+#nav { padding: 0 3px; gap: 0; }
+#reload .i-stop, #reload.loading .i-reload { display: none; }
+#reload.loading .i-stop { display: block; }
+#omni { flex: 1; min-width: 0; padding: 0 16px; overflow: hidden; }
+#omnibox { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--fg); font: inherit; text-shadow: var(--sh); user-select: text; caret-color: var(--fg); }
+#omnibox::placeholder { color: var(--dim); }
+#loadbar { position: absolute; left: 14px; right: 14px; bottom: 3px; height: 2px; opacity: 0; transition: opacity .15s; background: linear-gradient(90deg, transparent, var(--fg), transparent) 0 0 / 40% 100% no-repeat; }
+#loadbar.on { opacity: .9; animation: sheen 1.1s ease-in-out infinite; }
+#mem { gap: 6px; padding: 0 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
+#mem:hover { color: var(--fg); }
+#mem svg { width: 15px; height: 15px; }
+#ai-toggle { padding: 0 15px; font-weight: 600; letter-spacing: .04em; color: var(--dim); }
+#ai-toggle:hover, #ai-toggle.on { color: var(--fg); }
+#winctl { padding: 0 3px; gap: 0; }
+#winctl .ib svg { width: 14px; height: 14px; }
+#w-close:hover { background: #e5484d; color: #fff; }
+
+.solid #gl { display: none; }
+.solid .lg { background: rgba(28,30,40,.85); border: 1px solid rgba(255,255,255,.18); }
+.solid .tab.active { background: rgba(60,64,84,.92); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes sheen { from { background-position: -50% 0; } to { background-position: 150% 0; } }
