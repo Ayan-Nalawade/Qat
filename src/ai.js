@@ -33,7 +33,7 @@ function setup(ipcMain, ui) {
   const ok = e => e.sender === ui() || !!e.senderFrame?.url.startsWith('qat://')
   const handle = (ch, f) => ipcMain.handle(ch, (e, ...a) => ok(e) ? f(e, ...a) : undefined)
   const on = (ch, f) => ipcMain.on(ch, (e, ...a) => ok(e) && f(e, ...a))
-  const changed = () => { const p = pub(); ui().send('ai:changed', p); return p }
+  const changed = () => { const p = pub(); ui()?.send('ai:changed', p); return p }
 
   handle('ai:settings', () => pub())
 
