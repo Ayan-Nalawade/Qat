@@ -5,8 +5,11 @@ const { pathToFileURL } = require('url')
 protocol.registerSchemesAsPrivileged([{ scheme: 'qat', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 app.commandLine.appendSwitch('process-per-site')
 app.commandLine.appendSwitch('renderer-process-limit', '6')
-app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,BackForwardCache')
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512')
+app.commandLine.appendSwitch('disable-site-isolation-trials') // cross-site iframes share the parent's process, ad heavy pages spawned 25+ processes
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,BackForwardCache,IsolateOrigins,site-per-process')
+app.commandLine.appendSwitch('log-level', '3')
+process.removeAllListeners('warning')
+process.on('warning', w => /Failed to load URL/.test(w.message) || console.warn(w.name + ': ' + w.message))
 
 const SLEEP_MS = 5 * 60 * 1000
 const HOME = 'https://www.google.com'
@@ -145,8 +148,9 @@ function qatFile(req) {
 
 app.whenReady().then(() => {
   protocol.handle('qat', req => { const f = qatFile(req); return f ? net.fetch(pathToFileURL(f).toString()) : new Response('Not found', { status: 404 }) })
+  require('./block')()
   createWindow()
   setInterval(() => sleepTabs(false), 60000)
-  setInterval(() => send('mem', Math.round(app.getAppMetrics().reduce((s, m) => s + m.memory.workingSetSize, 0) / 1024)), 5000)
+  setInterval(() => send('mem', Math.round(app.getAppMetrics().reduce((s, m) => s + m.memory.privateBytes, 0) / 1024)), 5000)
 })
 app.on('window-all-closed', () => app.quit())
