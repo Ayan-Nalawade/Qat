@@ -131,6 +131,8 @@ ipcMain.on('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize(
 ipcMain.on('win:close', () => win.close())
 ipcMain.on('ui:ready', () => sendTabs())
 
+require('./ai').setup(ipcMain)
+
 app.whenReady().then(() => {
   createWindow()
   setInterval(() => sleepTabs(false), 60000)
