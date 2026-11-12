@@ -13,7 +13,11 @@
   <div class="brand"><img src="qat://settings/shared/icon.png" alt=""><span>Settings</span></div>
   <a href="#privacy">Privacy and security</a>
   <a href="#ai">AI</a>
+  <a href="#reset">Reset</a>
   <a href="#about">About Qat</a>
+  <hr>
+  <a href="qat://bookmarks">Bookmarks</a>
+  <a href="qat://extensions">Extensions</a>
 </nav>
 <main>
   <section id="privacy">
@@ -35,6 +39,15 @@
     </div>
     <h3>Providers</h3>
     <div class="box" id="cards"></div>
+  </section>
+  <section id="reset">
+    <h2>Reset</h2>
+    <div class="box">
+      <div class="item">
+        <span class="txt"><b>Reset Qat</b><small>Deletes bookmarks, history, extensions, cookies, site logins, AI keys and every setting, then restarts Qat like it's the first run. This can't be undone.</small></span>
+        <button type="button" class="pill danger" id="reset-btn">Reset</button>
+      </div>
+    </div>
   </section>
   <section id="about">
     <h2>About Qat</h2>
