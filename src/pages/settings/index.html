@@ -4,25 +4,45 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
 <title>Settings</title>
+<link rel="icon" href="qat://settings/shared/icon.png">
 <link rel="stylesheet" href="qat://settings/shared/style.css">
 <link rel="stylesheet" href="settings.css">
 </head>
 <body>
-<div id="page">
-  <main>
-    <h1>Settings</h1>
-    <h2 class="sec">Privacy</h2>
-    <section class="card glass">
-      <label class="sw"><span><b>Deep scan</b><small>Blocks ads that come from the site itself, like YouTube video ads, plus cookie banners and tracker hosts the normal lists miss. Uses about 15 MB more memory. Open tabs pick it up after a reload.</small></span><input id="deep" type="checkbox"></label>
-      <span class="note" id="deep-note"></span>
-    </section>
-    <h2 class="sec">AI</h2>
-    <section class="card glass">
-      <label>Active provider<select id="active" class="ctl"></select></label>
-    </section>
-    <div id="cards"></div>
-  </main>
-</div>
+<nav>
+  <div class="brand"><img src="qat://settings/shared/icon.png" alt=""><span>Settings</span></div>
+  <a href="#privacy">Privacy and security</a>
+  <a href="#ai">AI</a>
+  <a href="#about">About Qat</a>
+</nav>
+<main>
+  <section id="privacy">
+    <h2>Privacy and security</h2>
+    <div class="box">
+      <label class="item">
+        <span class="txt"><b>Deep scan</b><small>Blocks ads that come from the site itself, like YouTube video ads, plus cookie banners and tracker hosts the normal lists miss. Uses about 15 MB more memory. Open tabs pick it up after a reload.</small><small class="note" id="deep-note"></small></span>
+        <input id="deep" class="sw" type="checkbox">
+      </label>
+    </div>
+  </section>
+  <section id="ai">
+    <h2>AI</h2>
+    <div class="box">
+      <label class="item">
+        <span class="txt"><b>Active provider</b><small>The chat sidebar talks to this one</small></span>
+        <select id="active" class="ctl"></select>
+      </label>
+    </div>
+    <h3>Providers</h3>
+    <div class="box" id="cards"></div>
+  </section>
+  <section id="about">
+    <h2>About Qat</h2>
+    <div class="box">
+      <div class="item"><img class="logo" src="qat://settings/shared/icon.png" alt=""><span class="txt"><b>Qat</b><small id="ver"></small></span></div>
+    </div>
+  </section>
+</main>
 <script src="qat://settings/shared/picker.js"></script>
 <script src="settings.js"></script>
 </body>
