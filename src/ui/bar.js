@@ -135,7 +135,7 @@ if (gl) {
 void main() { vec2 v = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(v * 2. - 1., 0, 1); }`))
   gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
-uniform vec2 u_res; uniform float u_dpr; uniform int u_n; uniform vec4 u_rect[${MAX}]; uniform float u_emph[${MAX}]; uniform float u_tone[${MAX}]; uniform sampler2D u_tex;
+uniform vec2 u_res; uniform float u_dpr; uniform int u_n; uniform vec4 u_rect[${MAX}]; uniform float u_emph[${MAX}]; uniform float u_tone[${MAX}]; uniform float u_lum[${MAX}]; uniform sampler2D u_tex;
 out vec4 o;
 float sdf(vec2 p, vec4 r) { vec2 b = r.zw * .5; float rad = min(b.x, b.y); vec2 q = abs(p - r.xy - b) - (b - rad); return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - rad; }
 vec3 tx(vec2 p) { return texture(u_tex, clamp(vec2(p.x, u_res.y - p.y) / u_res, 0., 1.)).bgr; } // page top mirrored up into the bar, like apple's background extension
@@ -147,30 +147,28 @@ void main() {
   vec3 bg = blur(p, 11.);
   bg = mix(bg, blur(p, 24.), .6);
   if (k < 0) { o = vec4(bg, 1); return; }
-  vec4 r = u_rect[k]; float e = u_emph[k], tn = u_tone[k];
+  vec4 r = u_rect[k]; float e = u_emph[k], tn = u_tone[k], f = smoothstep(.45, .9, u_lum[k]); // brighter backdrop = frostier, less shine
   bg *= 1. - pow(1. - clamp(best / 9., 0., 1.), 2.) * (.14 + .16 * tn) * step(0., best);
   if (best > .5) { o = vec4(bg, 1); return; }
   float cov = clamp(.5 - best, 0., 1.), d = max(-best, 0.);
   vec2 h = vec2(.5, 0.);
   vec2 n = normalize(vec2(sdf(p + h.xy, r) - sdf(p - h.xy, r), sdf(p + h.yx, r) - sdf(p - h.yx, r)) + 1e-5);
-  vec2 off = n * (6. + 2. * e) * pow(1. - clamp(d / 18., 0., 1.), 2.); // 2*6/18 < 1 keeps the mapping monotonic, no mirrored text
+  vec2 off = n * (6. + 2. * e) * (1. - .6 * f) * pow(1. - clamp(d / 18., 0., 1.), 2.); // 2*6/18 < 1 keeps the mapping monotonic, no mirrored text
   vec3 c = vec3(0);
   for (int j = 0; j < 9; j++) { vec2 q = vec2(float(j % 3) - 1., float(j / 3) - 1.) * 2.4; c += vec3(tx(p - off + q).r, tx(p - off * 1.05 + q).g, tx(p - off * 1.1 + q).b); }
   c /= 9.;
-  c = mix(c, blur(p, 14.), .45); // wide average stops one small bright button flooding the whole capsule
-  c = mix(vec3(dot(c, vec3(.299, .587, .114))), c, 1.15 + .06 * e);
-  c = mix(c, mix(vec3(.08, .09, .12), vec3(1.), tn), .45 + .05 * e);
-  float L = dot(n, normalize(vec2(-1., -1.)));
-  float spec = (1. - smoothstep(0., 1.8, d)) * (.25 + .6 * max(L, 0.) + .25 * max(-L, 0.)) * (1. + .5 * e);
-  float glow = pow(1. - clamp(d / 8., 0., 1.), 3.) * .12 * max(L, 0.);
-  c += spec + glow + .05 * (1. - (p.y - r.y) / r.w);
+  c = mix(c, blur(p, 14.), .45 + .4 * f); // wide average stops one small bright button flooding the whole capsule
+  c = mix(vec3(dot(c, vec3(.299, .587, .114))), c, 1.15 + .06 * e - .25 * f);
+  c = mix(c, mix(vec3(.08, .09, .12), vec3(1.), tn), .45 + .05 * e + .2 * f);
+  float L = max(dot(n, normalize(vec2(-1., -1.))), 0.);
+  c += (pow(1. - clamp(d / 8., 0., 1.), 3.) * .08 * L + .03 * (1. - (p.y - r.y) / r.w)) * (1. - f); // soft inner light, no hard rim line
   c = clamp(c, 0., 1.); // clamp first or the light-backdrop rim below darkens >1 values back to pure white
-  c = mix(c, c * .8, (1. - smoothstep(0., 1.4, d)) * tn);
+  c = mix(c, c * .9, (1. - smoothstep(0., 1.4, d)) * tn);
   o = vec4(mix(bg, c, cov), 1);
 }`))
   gl.linkProgram(pr)
   gl.useProgram(pr)
-  for (const n of ['u_res', 'u_dpr', 'u_n', 'u_rect', 'u_emph', 'u_tone', 'u_tex']) U[n] = gl.getUniformLocation(pr, n)
+  for (const n of ['u_res', 'u_dpr', 'u_n', 'u_rect', 'u_emph', 'u_tone', 'u_lum', 'u_tex']) U[n] = gl.getUniformLocation(pr, n)
   tex = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, tex)
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v)
@@ -210,7 +208,7 @@ function tones() {
         sum += .2126 * bits.d[i + 2] + .7152 * bits.d[i + 1] + .0722 * bits.d[i]
         n++
       }
-    const l = n ? sum / n / 255 : 0, t = it.el.dataset.tone
+    const l = it.l = n ? sum / n / 255 : 0, t = it.el.dataset.tone
     if (l > .6 && t !== 'light') it.el.dataset.tone = 'light'
     else if (l < .45 && t !== 'dark') it.el.dataset.tone = 'dark'
   }
@@ -229,14 +227,15 @@ function draw() {
     gl.generateMipmap(gl.TEXTURE_2D)
   }
   tones()
-  const rects = new Float32Array(MAX * 4), emph = new Float32Array(MAX), tone = new Float32Array(MAX)
-  items.forEach((it, i) => { rects.set([it.x, it.y, it.w, it.h], i * 4); emph[i] = it.e; tone[i] = it.el.dataset.tone === 'light' ? 1 : 0 })
+  const rects = new Float32Array(MAX * 4), emph = new Float32Array(MAX), tone = new Float32Array(MAX), lum = new Float32Array(MAX)
+  items.forEach((it, i) => { rects.set([it.x, it.y, it.w, it.h], i * 4); emph[i] = it.e; tone[i] = it.el.dataset.tone === 'light' ? 1 : 0; lum[i] = it.l || 0 })
   gl.uniform2f(U.u_res, innerWidth, BH)
   gl.uniform1f(U.u_dpr, dpr)
   gl.uniform1i(U.u_n, items.length)
   gl.uniform4fv(U.u_rect, rects)
   gl.uniform1fv(U.u_emph, emph)
   gl.uniform1fv(U.u_tone, tone)
+  gl.uniform1fv(U.u_lum, lum)
   gl.clearColor(0, 0, 0, 0)
   gl.clear(gl.COLOR_BUFFER_BIT)
   gl.drawArrays(gl.TRIANGLES, 0, 3)

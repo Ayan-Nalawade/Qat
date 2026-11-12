@@ -178,8 +178,7 @@ function meter() {
 
 function createWindow() {
   win = new BaseWindow({
-    width: 1280, height: 820, minWidth: 720, minHeight: 480, frame: false, icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'), backgroundColor: '#00000000',
-    ...(process.platform === 'win32' && { backgroundMaterial: 'acrylic' }),
+    width: 1280, height: 820, minWidth: 720, minHeight: 480, frame: false, icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'), backgroundColor: '#16171a', // acrylic under a playing video flashed white on windows
     ...(process.platform === 'darwin' && { vibrancy: 'under-window', visualEffectState: 'active' }),
   })
   bar = ui()
