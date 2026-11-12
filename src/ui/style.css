@@ -122,6 +122,23 @@ body[data-tone="light"] { --fg: #0f1115; --dim2: rgba(15,17,21,.6); --faint: rgb
 #chat-in { display: block; width: 100%; max-height: 160px; resize: none; border: 0; outline: 0; background: none; color: var(--fg); font: inherit; font-size: 13.5px; line-height: 20px; padding: 2px 0 10px; user-select: text; text-shadow: var(--sh); }
 #chat-in::placeholder { color: var(--dim2); }
 .tools { display: flex; align-items: center; gap: 6px; }
+#attach { margin-left: -8px; }
+#files { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px -6px; }
+#files:empty { display: none; }
+#chat-composer.drag { box-shadow: inset 0 0 0 1.5px var(--fg); }
+.att { position: relative; display: flex; align-items: center; gap: 8px; height: 44px; max-width: 200px; padding: 0 12px 0 6px; border-radius: 12px; background: var(--faint); font-size: 12px; text-align: left; }
+.att.img { width: 44px; padding: 0; }
+.att img { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; display: block; }
+.att .doc { width: 32px; height: 32px; flex: none; border-radius: 8px; display: grid; place-items: center; background: var(--faint2); color: var(--dim2); }
+.att .doc svg { width: 16px; height: 16px; }
+.att div { min-width: 0; }
+.att b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att small { color: var(--dim2); }
+.att .x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 9px; display: none; place-items: center; background: var(--fg); color: var(--inv); }
+.att .x svg { width: 10px; height: 10px; stroke-width: 3; filter: none; }
+.att:hover .x { display: grid; }
+.ufiles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.msg.user .ufiles:last-child { margin-bottom: 0; }
 #ctx { flex: 0 1 auto; max-width: 150px; }
 #ctx span { overflow: hidden; text-overflow: ellipsis; }
 #agent { margin-right: auto; flex: none; }

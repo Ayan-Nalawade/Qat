@@ -294,12 +294,14 @@ Safety rules:
 - Don't try to solve CAPTCHAs, ask the user.` : '') + '\n\nBe concise.'
 }
 
-// keeps the context small: only the newest screenshot and the last two page snapshots stay in full
+const flat = (c, note) => c.filter(x => x.type === 'text').map(x => x.text).concat(note).join('\n')
+
+// keeps the context small: only the newest image and the last two page snapshots stay in full
 function prune(msgs) {
   let imgs = 0, looks = 0, texts = 0
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i]
-    if (Array.isArray(m.content) && m.content.some(c => c.type === 'image_url') && imgs++) m.content = '[older screenshot removed]'
+    if (Array.isArray(m.content) && m.content.some(c => c.type === 'image_url') && imgs++) m.content = flat(m.content, '[older image removed]')
     if (m.role === 'tool' && m.name === 'look' && looks++ >= 2) m.content = '[old page snapshot removed]'
     if (m.role === 'tool' && (m.name === 'fetch' || m.name === 'read') && texts++ >= 3) m.content = '[old page text removed, fetch it again if needed]'
   }
@@ -316,7 +318,7 @@ async function run({ base, model, headers, history, agent, signal, out, browser 
       if (!r.ok) {
         const err = (await r.text()).slice(0, 500)
         if (r.status === 400 && useTools && /tool|function/i.test(err) && step === 0) { useTools = false; out('ai:note', { text: "This model can't use tools, so it can only chat. Pick a model with tool calling to let it search and use the browser." }); step--; continue }
-        if (r.status === 400 && images && /image|vision|multimodal|content/i.test(err) && msgs.some(m => Array.isArray(m.content))) { images = false; for (const m of msgs) if (Array.isArray(m.content)) m.content = "[screenshot dropped, this model can't take images. Use look and read instead.]"; step--; continue }
+        if (r.status === 400 && images && /image|vision|multimodal|content/i.test(err) && msgs.some(m => Array.isArray(m.content))) { images = false; for (const m of msgs) if (Array.isArray(m.content)) m.content = flat(m.content, "[image left out, this model can't see images. Use look and read instead.]"); if (history.some(m => Array.isArray(m.content))) out('ai:note', { text: "This model can't see images, so it only got the text. Pick a vision model for pictures." }); step--; continue }
         throw new Error(`HTTP ${r.status} ${err}`)
       }
       let text = '', calls = [], buf = '', inThink = false, hold = ''

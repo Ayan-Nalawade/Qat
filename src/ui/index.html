@@ -25,8 +25,11 @@
     <div id="working" class="lg" hidden><i class="pulse"></i><span></span><button id="stop" class="chip">Stop</button></div>
     <div id="slash" class="lg" hidden></div>
     <div id="chat-composer" class="lg">
+      <div id="files"></div>
+      <input id="file-in" type="file" multiple hidden>
       <textarea id="chat-in" rows="1" placeholder="Ask about this page, or type / for commands" spellcheck="false"></textarea>
       <div class="tools">
+        <button id="attach" class="btn" title="Add files or images (you can also drop or paste them)"><svg viewBox="0 0 24 24"><path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7-7L13 4.5a3.3 3.3 0 0 1 4.7 4.7l-7.9 7.9a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3"/></svg></button>
         <button id="ctx" class="chip" title="The tab the assistant can see"><img alt=""><span></span></button>
         <button id="agent" class="chip" title="Let the assistant click, type and browse in the current tab"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg>Use browser</button>
         <button id="chat-send" title="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-halt" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>

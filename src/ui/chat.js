@@ -69,7 +69,13 @@ function thought(p, live) {
 function bubble(m, last) {
   const el = document.createElement('div')
   el.className = 'msg ' + m.role + (m.role === 'user' ? ' lg' : '')
-  if (m.role === 'user') { el.textContent = m.content; return el }
+  if (m.role === 'user') {
+    if (!m.files?.length) { el.textContent = m.content; return el }
+    const row = Object.assign(document.createElement('div'), { className: 'ufiles' })
+    row.append(...m.files.map(f => chip(f)))
+    el.append(row, m.content)
+    return el
+  }
   for (const p of m.parts) {
     if (p.type === 'text') el.append(Object.assign(document.createElement('div'), { className: 'txt', innerHTML: md(p.text) }))
     else if (p.type === 'steps') el.append(steps(p, last && busy))
@@ -124,6 +130,68 @@ const said = m => m.parts.filter(p => p.type === 'text').map(p => p.text).join('
 // what the model gets back as history, a reply that only used the browser still says what it did
 const text = m => m.role === 'user' ? m.content : said(m) || m.parts.filter(p => p.type === 'steps').map(p => '(used the browser: ' + p.steps.map(s => s.label).join(', ') + ')').join('\n')
 
+// uploads: images go to the model as pictures, pdfs and text files as their text
+let files = []
+const filesEl = $('#files'), fileIn = $('#file-in'), composer = $('#chat-composer')
+const DOC = '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>'
+const TEXTY = /\.(txt|md|markdown|csv|tsv|json|jsonl|xml|yaml|yml|toml|ini|log|html?|css|s?js|mjs|cjs|jsx|tsx?|py|rb|go|rs|java|kt|c|h|cc|cpp|hpp|cs|php|swift|sh|ps1|bat|sql|lua|r|vue|svelte)$/i
+const kb = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'
+
+function chip(f, rm) {
+  const b = Object.assign(document.createElement('div'), { className: 'att' + (f.kind === 'image' ? ' img' : ''), title: f.name })
+  if (f.kind === 'image') b.append(Object.assign(document.createElement('img'), { src: f.url, alt: f.name }))
+  else {
+    b.insertAdjacentHTML('beforeend', '<span class="doc">' + DOC + '</span><div><b></b><small></small></div>')
+    b.querySelector('b').textContent = f.name
+    b.querySelector('small').textContent = f.info
+  }
+  if (rm) { const x = Object.assign(document.createElement('button'), { className: 'x', title: 'Remove', innerHTML: I.err }); x.onclick = rm; b.append(x) }
+  return b
+}
+const paintFiles = () => filesEl.replaceChildren(...files.map((f, i) => chip(f, () => { files.splice(i, 1); paintFiles() })))
+
+function shrink(file) { // phone photos are 5MB+, 1600px jpeg is plenty for a model to read
+  return createImageBitmap(file).then(bm => {
+    const k = Math.min(1, 1600 / Math.max(bm.width, bm.height)), c = Object.assign(document.createElement('canvas'), { width: Math.round(bm.width * k), height: Math.round(bm.height * k) })
+    c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height)
+    return c.toDataURL('image/jpeg', .85)
+  })
+}
+
+async function attach(list) {
+  for (const f of list) {
+    if (files.length >= 10) return flash('10 files at most')
+    try {
+      if (f.type.startsWith('image/')) files.push({ kind: 'image', name: f.name || 'pasted image', url: await shrink(f) })
+      else if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+        const { text, pages } = await qat.ai.pdf(new Uint8Array(await f.arrayBuffer()))
+        if (!text) { flash(f.name + ' has no text, it might be scanned'); continue }
+        files.push({ kind: 'text', name: f.name, text: text.slice(0, 150000), info: pages + ' page' + (pages > 1 ? 's' : '') })
+      } else if (f.type.startsWith('text/') || /json|xml|javascript/.test(f.type) || TEXTY.test(f.name)) {
+        const t = await f.text()
+        files.push({ kind: 'text', name: f.name, text: t.slice(0, 150000), info: kb(f.size) })
+      } else flash("Can't read " + (f.name.split('.').pop() || 'that kind of') + ' files yet')
+    } catch { flash("Couldn't open " + f.name) }
+    paintFiles()
+  }
+  input.focus()
+}
+
+fileIn.onchange = () => { attach([...fileIn.files]); fileIn.value = '' }
+$('#attach').onclick = () => fileIn.click()
+input.addEventListener('paste', e => { const f = [...e.clipboardData.files]; if (f.length) { e.preventDefault(); attach(f) } })
+const side = $('#side')
+side.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); composer.classList.add('drag') } })
+side.addEventListener('dragleave', e => { if (!side.contains(e.relatedTarget)) composer.classList.remove('drag') })
+side.addEventListener('drop', e => { e.preventDefault(); composer.classList.remove('drag'); attach([...e.dataTransfer.files]) })
+
+// what the api gets for a message: attached text inline, images as image parts
+function api(m) {
+  if (m.role !== 'user' || !m.files?.length) return { role: m.role, content: text(m) }
+  const t = [...m.files.filter(f => f.kind === 'text').map(f => 'Attached file ' + f.name + ':\n"""\n' + f.text + '\n"""'), m.content].filter(Boolean).join('\n\n'), imgs = m.files.filter(f => f.kind === 'image')
+  return { role: 'user', content: imgs.length ? [{ type: 'text', text: t || 'Look at the attached image.' }, ...imgs.map(f => ({ type: 'image_url', image_url: { url: f.url } }))] : t }
+}
+
 function send() {
   const t = input.value.trim(), m = t.match(/^\/(\w+)(?:\s+([\s\S]*))?$/) // /etc/hosts style text isn't a command
   if (m) {
@@ -133,20 +201,21 @@ function send() {
     else { err = 'There is no /' + m[1] + ' command. Type / to see them all.'; draw() }
     return
   }
-  ask(t)
+  ask(t, files)
 }
 
-function ask(t) {
-  if (!t) return
+function ask(t, att = []) {
+  if (!t && !att.length) return
   if (busy) { flash('Still replying, wait for it or use /stop'); return false }
   err = ''
   stick = true
-  msgs.push({ role: 'user', content: t }, { role: 'assistant', parts: [] })
+  msgs.push({ role: 'user', content: t, files: att }, { role: 'assistant', parts: [] })
+  if (att === files) { files = []; paintFiles() }
   input.value = ''
   grow()
   setBusy(true)
   draw()
-  qat.ai.chat(++rid, msgs.slice(0, -1).slice(-30).map(m => ({ role: m.role, content: text(m) })).filter(m => m.content), agent)
+  qat.ai.chat(++rid, msgs.slice(0, -1).slice(-30).map(api).filter(m => m.content), agent)
 }
 
 const mine = d => d.rid === rid
@@ -218,9 +287,9 @@ function retry() {
   const i = msgs.findLastIndex(m => m.role === 'user')
   if (i < 0) return
   if (busy) return ask(msgs[i].content)
-  const t = msgs[i].content
+  const { content, files: f } = msgs[i]
   msgs = msgs.slice(0, i)
-  ask(t)
+  ask(content, f)
 }
 
 function copyLast() {

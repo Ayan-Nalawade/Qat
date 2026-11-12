@@ -39,6 +39,16 @@ function setup(ipcMain, ui, browser) {
 
   handle('ai:settings', () => pub())
 
+  handle('ai:pdf', async (e, bytes) => { // text out of an uploaded pdf, the model only gets words
+    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const task = getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useSystemFonts: true }), doc = await task.promise
+    let text = ''
+    for (let i = 1; i <= doc.numPages && text.length < 150000; i++) text += (await (await doc.getPage(i)).getTextContent()).items.map(t => t.str + (t.hasEOL ? '\n' : '')).join('') + '\n\n'
+    const pages = doc.numPages
+    task.destroy()
+    return { text: text.trim(), pages }
+  })
+
   handle('ai:pick', (e, { provider, model }) => {
     const s = read()
     s.provider = provider
