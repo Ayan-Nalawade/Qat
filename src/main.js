@@ -21,13 +21,14 @@ const SLEEP_MS = 3 * 60 * 1000
 const HOME = 'https://www.google.com'
 const tabs = new Map()
 const SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
-let STRIP = 88, crx // STRIP grows by a row when the bookmarks bar is on
+let STRIP = 88, crx, timers = [] // STRIP grows by a row when the bookmarks bar is on
 let win, bar, side, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
-const send = (ch, ...a) => side?.webContents.send(ch, ...a)
+const live = v => v && !v.webContents.isDestroyed()
+const send = (ch, ...a) => live(side) && side.webContents.send(ch, ...a)
 const ui = () => new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } })
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
-const toBar = (ch, ...a) => bar.webContents.send(ch, ...a)
+const toBar = (ch, ...a) => live(bar) && bar.webContents.send(ch, ...a)
 const sendTabs = () => (send('ai:tab', { title: active()?.title, url: active()?.url, favicon: active()?.favicon }), toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) }))
 const active = () => tabs.get(activeId)
 const tabOf = wc => [...tabs.values()].find(t => t.view?.webContents === wc)
@@ -241,6 +242,7 @@ function createWindow() {
   win.on('maximize', () => toBar('maximized', true))
   win.on('unmaximize', () => toBar('maximized', false))
   win.on('resize', layout)
+  win.on('closed', () => { timers.forEach(clearInterval); app.quit() }) // the timers touch the window, after it's gone each tick threw 'Object has been destroyed'
   newTab()
 }
 
@@ -346,9 +348,6 @@ app.whenReady().then(async () => {
   await ext.start()
   block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   createWindow()
-  setInterval(() => sleepTabs(false), 60000)
-  setInterval(meter, 5000)
-  setInterval(snap, 500)
-  setInterval(sideSnap, 1500)
+  timers = [setInterval(() => sleepTabs(false), 60000), setInterval(meter, 5000), setInterval(snap, 500), setInterval(sideSnap, 1500)]
 })
 app.on('window-all-closed', () => app.quit())
