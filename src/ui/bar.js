@@ -57,7 +57,7 @@ function show(list) {
     el.innerHTML = ICON[s.star ? 'star' : s.kind] + '<span class="t"></span><span class="u"></span>'
     el.querySelector('.t').textContent = s.title || s.text
     el.querySelector('.u').textContent = s.title ? s.text : ''
-    el.onmousedown = e => { e.preventDefault(); go(s) }
+    el.onmousedown = e => { e.preventDefault(); e.button < 2 && go(s) }
     drop.append(el)
   }
   drop.hidden = !sugg.length
@@ -115,7 +115,7 @@ function showFolder(items, btn) {
     const r = mk('div', 'sg')
     r.append(ico(b), mk('span', 't', b.title))
     r.title = b.url
-    r.onmousedown = e => { e.preventDefault(); open(b.url, e); openPop(null) }
+    r.onmousedown = e => { e.preventDefault(); if (e.button < 2) { open(b.url, e); openPop(null) } }
     fold.append(r)
   }
   openPop(fold, btn, true)
@@ -190,8 +190,8 @@ qat.on('exts', l => {
 })
 $('#ext-more').onclick = () => { if (extmenu.hidden) fillExt(); openPop(extmenu, $('#ext-more')) }
 
-function build(m, g = []) {
-  const v = omni.value, list = [looksUrl(v) ? { kind: 'url', text: v, url: v } : { kind: 'search', text: v, title: v + ' - Google Search', url: gsearch(v) }], seen = new Set([bare(v)])
+function build(v, m, g = []) {
+  const list = [looksUrl(v) ? { kind: 'url', text: v, url: v } : { kind: 'search', text: v, title: v + ' - Google Search', url: gsearch(v) }], seen = new Set([bare(v)])
   for (const h of m.items) if (!seen.has(bare(h.url))) { seen.add(bare(h.url)); list.push({ kind: 'url', text: bare(h.url), title: h.title, url: h.url, star: h.star }) }
   for (const q of g) if (q !== typed) list.push({ kind: 'search', text: q, url: gsearch(q) })
   return list
@@ -207,13 +207,14 @@ omni.addEventListener('input', async e => {
   const m = await qat.match(typed)
   if (my !== seq) return
   if (!del && m.inline.toLowerCase().startsWith(typed.toLowerCase()) && m.inline.length > typed.length && omni.value === typed) { omni.value = typed + m.inline.slice(typed.length); omni.setSelectionRange(typed.length, omni.value.length) }
-  show(build(m))
-  gt = setTimeout(() => qat.search(typed).then(g => my === seq && show(build(m, g))), 120)
+  const v = omni.value // first row is what was typed plus the inline completion, not a suggestion picked with the arrows later
+  show(build(v, m))
+  gt = setTimeout(() => qat.search(typed).then(g => my === seq && sel < 0 && show(build(v, m, g))), 120)
 })
 omni.addEventListener('keydown', e => {
   if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && sugg.length) {
     e.preventDefault()
-    sel = (sel + (e.key === 'ArrowDown' ? 2 : 0) + sugg.length) % (sugg.length + 1) - 1
+    sel = (sel + 1 + (e.key === 'ArrowDown' ? 1 : sugg.length)) % (sugg.length + 1) - 1
     drop.querySelectorAll('.sg').forEach((el, i) => el.classList.toggle('hi', i === sel))
     omni.value = sel < 0 ? typed : sugg[sel].kind === 'url' ? sugg[sel].url : sugg[sel].text
   } else if (e.key === 'Enter' && omni.value.trim()) { sel >= 0 ? go(sugg[sel]) : qat.go(omni.value); omni.blur() }
@@ -238,6 +239,8 @@ const solid = matchMedia('(prefers-reduced-transparency: reduce)').matches
 document.body.classList.toggle('solid', solid)
 
 const gl = solid ? null : cv.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false })
+document.body.classList.toggle('solid', !gl)
+cv.addEventListener('webglcontextlost', () => document.body.classList.add('solid')) // gpu reset, plain capsules beat invisible ones
 let items = [], frame = null, bits = null, tex, tw = 0, th = 0, raf = 0, dpr = 1
 const U = {}
 

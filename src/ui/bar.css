@@ -8,6 +8,7 @@ body[data-tone="light"] #bmbar { color: #16181d; }
 #bmbar[hidden] { display: none; }
 #bms { display: flex; gap: 2px; flex: 1; min-width: 0; overflow: hidden; }
 .bm { display: flex; align-items: center; gap: 6px; height: 26px; max-width: 170px; padding: 0 9px; border-radius: 13px; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; -webkit-app-region: no-drag; }
+.bm[hidden] { display: none; }
 .bm span { overflow: hidden; text-overflow: ellipsis; }
 .bm:hover, .bm.on { background: rgba(127,140,170,.25); }
 .bm img, .bm svg, .sg img { width: 16px; height: 16px; flex: none; }

@@ -5,6 +5,7 @@ cv.id = 'gl'
 document.body.prepend(cv)
 const gl = matchMedia('(prefers-reduced-transparency: reduce)').matches ? null : cv.getContext('webgl2', { alpha: false, antialias: false })
 document.body.classList.toggle('solid', !gl)
+cv.addEventListener('webglcontextlost', () => document.body.classList.add('solid'))
 let U = {}, items = [], raf = 0, tone = 0, goal = 0
 
 if (gl) {
