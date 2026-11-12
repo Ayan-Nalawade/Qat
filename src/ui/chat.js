@@ -6,9 +6,10 @@ try { agent = localStorage.agent !== '0' } catch {}
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const I = {
   ok: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', err: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
-  chev: '<svg class="chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>', spark: '<svg viewBox="0 0 24 24"><path d="M12 4l1.8 5.2L19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8z"/></svg>',
+  chev: '<svg class="chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>', cursor: '<svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg>',
+  think: '<svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>',
 }
-const SUGG = [['Summarize this page', 'Summarize this page in a few bullet points.'], ['What should I know here?', 'What are the most important things on this page?'], ['Find something for me', 'Search the web and find '], ['Fill in a form', 'Help me fill in the form on this page. Ask me for anything you need.']]
+const SUGG = [['Summarise this page', 'Summarise this page in a few bullet points.'], ['What matters on this page?', 'What are the most important things on this page?'], ['Look something up', 'Search the web and find '], ['Help me fill in this form', 'Help me fill in the form on this page. Ask me for anything you need.']]
 
 function md(src) {
   const stash = []
@@ -37,9 +38,9 @@ function md(src) {
 
 function steps(p, live) {
   const d = document.createElement('details'), done = p.steps.filter(s => s.state !== 'run').length, bad = p.steps.some(s => s.state === 'err')
-  d.className = 'steps'
+  d.className = 'card lg' + (live ? ' live' : '')
   d.open = live || p.open
-  d.innerHTML = '<summary>' + I.spark + '<span>' + (live ? 'Using the browser' : 'Used the browser') + ', ' + p.steps.length + ' step' + (p.steps.length > 1 ? 's' : '') + (bad && !live ? ', some failed' : '') + '</span>' + I.chev + '</summary><ol></ol>'
+  d.innerHTML = '<summary>' + I.cursor + '<span>' + (live ? 'Using the browser' : 'Used the browser') + ', ' + p.steps.length + ' step' + (p.steps.length > 1 ? 's' : '') + (bad && !live ? ', some failed' : '') + '</span>' + I.chev + '</summary><ol></ol>'
   for (const s of p.steps) {
     const li = document.createElement('li')
     li.className = 'step ' + s.state
@@ -52,13 +53,25 @@ function steps(p, live) {
   return d
 }
 
+function thought(p, live) {
+  const d = document.createElement('details'), secs = Math.max(1, Math.round(((p.end || Date.now()) - p.start) / 1000))
+  d.className = 'card lg' + (live ? ' live' : '')
+  d.open = live || p.open
+  d.innerHTML = '<summary>' + I.think + '<span>' + (live ? 'Thinking' : 'Thought for ' + secs + 's') + '</span>' + I.chev + '</summary><pre class="think-body"></pre>'
+  d.querySelector('pre').textContent = p.text.trim()
+  d.querySelector('summary').onclick = () => { p.open = !d.open }
+  if (live) requestAnimationFrame(() => { const b = d.querySelector('pre'); b.scrollTop = b.scrollHeight })
+  return d
+}
+
 function bubble(m, last) {
   const el = document.createElement('div')
-  el.className = 'msg ' + m.role
+  el.className = 'msg ' + m.role + (m.role === 'user' ? ' lg' : '')
   if (m.role === 'user') { el.textContent = m.content; return el }
   for (const p of m.parts) {
     if (p.type === 'text') el.append(Object.assign(document.createElement('div'), { className: 'txt', innerHTML: md(p.text) }))
     else if (p.type === 'steps') el.append(steps(p, last && busy))
+    else if (p.type === 'think') el.append(thought(p, last && busy && !p.end))
     else el.append(Object.assign(document.createElement('div'), { className: 'note', textContent: p.text }))
   }
   if (last && busy && m.parts.at(-1)?.type !== 'text') el.append(Object.assign(document.createElement('div'), { className: 'typing', innerHTML: '<i></i><i></i><i></i>' }))
@@ -68,17 +81,17 @@ function bubble(m, last) {
 function empty() {
   const el = document.createElement('div'), p = cfg.providers[cfg.provider]
   el.className = 'empty'
-  el.innerHTML = '<img src="icon.png" alt=""><h3>How can I help?</h3>'
+  el.innerHTML = '<img src="icon.png" alt=""><h3>' + (tab.title ? 'Ask about this page' : 'Ask Qat anything') + '</h3>'
   if (!p.hasKey && cfg.provider !== 'custom') {
     el.insertAdjacentHTML('beforeend', '<p>Add an API key for ' + esc(p.name) + ' to start.</p><button class="pill">Open settings</button>')
     el.querySelector('button').onclick = openSettings
     return el
   }
-  el.insertAdjacentHTML('beforeend', '<p>' + (agent ? 'I can read this page and use the browser for you: click, type, scroll and go to other sites.' : 'Ask me anything about this page or anything else.') + '</p><div class="sugg"></div>')
+  el.insertAdjacentHTML('beforeend', '<p>' + (agent ? 'Or tell it what to do. It can click, type and move around the web in this tab while you watch.' : 'Browser control is off, so it can only chat.') + '</p><div class="sugg"></div>')
   for (const [t, q] of SUGG) {
     const b = document.createElement('button')
-    b.innerHTML = I.spark + '<span></span>'
-    b.lastChild.textContent = t
+    b.className = 'lg'
+    b.textContent = t
     b.onclick = () => { input.value = q; grow(); input.focus(); if (!q.endsWith(' ')) send() }
     el.querySelector('.sugg').append(b)
   }
@@ -120,9 +133,18 @@ function send() {
 }
 
 const mine = d => d.rid === rid
+const endThink = parts => { const t = parts.findLast(p => p.type === 'think'); if (t && !t.end) t.end = Date.now() }
+qat.on('ai:think', d => {
+  if (!mine(d)) return
+  const parts = msgs.at(-1).parts
+  if (parts.at(-1)?.type !== 'think') parts.push({ type: 'think', text: '', start: Date.now() })
+  parts.at(-1).text += d.text
+  redrawLast()
+})
 qat.on('ai:chunk', d => {
   if (!mine(d)) return
   const parts = msgs.at(-1).parts
+  endThink(parts)
   if (parts.at(-1)?.type !== 'text') parts.push({ type: 'text', text: '' })
   parts.at(-1).text += d.text
   redrawLast()
@@ -131,6 +153,7 @@ qat.on('ai:break', () => {})
 qat.on('ai:step', d => {
   if (!mine(d)) return
   const parts = msgs.at(-1).parts
+  endThink(parts)
   let p = parts.at(-1)
   if (p?.type !== 'steps') parts.push(p = { type: 'steps', steps: [] })
   const s = p.steps.find(s => s.id === d.id)
@@ -138,7 +161,7 @@ qat.on('ai:step', d => {
   redrawLast()
 })
 qat.on('ai:note', d => { if (mine(d)) { msgs.at(-1).parts.push({ type: 'note', text: d.text }); redrawLast() } })
-qat.on('ai:done', d => { if (!mine(d)) return; setBusy(false); if (!msgs.at(-1).parts.length) msgs.pop(); draw() })
+qat.on('ai:done', d => { if (!mine(d)) return; endThink(msgs.at(-1).parts); setBusy(false); if (!msgs.at(-1).parts.length) msgs.pop(); draw() })
 qat.on('ai:error', d => { if (!mine(d)) return; setBusy(false); err = d.message; if (!msgs.at(-1).parts.length) msgs.pop(); draw() })
 qat.on('ai:tab', t => {
   tab = t || {}
@@ -192,6 +215,7 @@ const label = () => { $('#chat-prov span').textContent = cfg.providers[cfg.provi
 sel.onchange = showPick
 $('#chat-prov').onclick = () => pickEl.hidden ? openPick() : closePick()
 $('#chat-set').onclick = openSettings
+$('#chat-close').onclick = () => qat.toggleSide()
 $('#ctx').onclick = () => input.focus()
 qat.on('ai:changed', s => { cfg = s; cache = {}; label(); draw() })
 

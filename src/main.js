@@ -108,6 +108,7 @@ function attach(tab) {
   wc.setWindowOpenHandler(({ url }) => { newTab(url); return { action: 'deny' } })
   wc.on('input-event', (e, i) => tab === active() && heat(i.type === 'mouseMove' ? 100 : 700))
   wc.on('context-menu', (e, p) => menu(wc, p))
+  wc.on('console-message', e => e.message === '__qat:stop' && ai.stop()) // the stop pill the agent overlay puts on the page
   crx.addTab(wc, win)
   for (const ev of ['did-stop-loading', 'did-navigate-in-page', 'dom-ready']) wc.on(ev, () => tab === active() && heat(1500))
   if (tab.hist) wc.navigationHistory.restore(tab.hist).catch(() => {})
@@ -128,7 +129,18 @@ function snap() {
   busy = true
   wc.capturePage({ x: 0, y: 0, width: pw, height: STRIP }).then(push, () => {}).finally(() => { busy = false; if (Date.now() < hot) snap() })
 }
-const heat = ms => { hot = Math.max(hot, Date.now() + ms); snap() }
+const heat = ms => { hot = Math.max(hot, Date.now() + ms); snap(); sideSnap() }
+
+// the chat panel's glass is tinted by the half of the page next to it, a 40px wide copy is plenty for that
+let sideAt = 0, sideBusy = false
+function sideSnap() {
+  const wc = active()?.view?.webContents
+  if (!sidebarOpen || !side || sideBusy || !wc || win.isMinimized() || Date.now() - sideAt < 700) return
+  sideBusy = true
+  sideAt = Date.now()
+  const h = win.getContentBounds().height - STRIP, x = Math.round(pw / 2)
+  wc.capturePage({ x, y: 0, width: pw - x, height: h }).then(img => { img = img.resize({ width: 40, quality: 'good' }); const { width, height } = img.getSize(); send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { sideBusy = false })
+}
 
 function purge(tab) {
   const d = tab !== active() && tab.view?.webContents.debugger
@@ -286,12 +298,14 @@ ipcMain.on('side:toggle', () => {
     side.setBackgroundColor('#00000000')
     keys(side.webContents)
     side.webContents.loadFile(path.join(__dirname, 'ui', 'index.html'))
-    side.webContents.once('did-finish-load', () => { send('side', sidebarOpen); sendTabs(); sidebarOpen && side.webContents.focus() })
+    side.webContents.once('did-finish-load', () => { send('side', sidebarOpen); sendTabs(); sideAt = 0; sideSnap(); sidebarOpen && side.webContents.focus() })
     win.contentView.addChildView(side)
   }
   layout()
   send('side', sidebarOpen)
   toBar('side', sidebarOpen)
+  sideAt = 0
+  sideSnap()
   if (sidebarOpen) side.webContents.focus()
 })
 ipcMain.on('mem:sleep-all', () => sleepTabs(true))
@@ -304,7 +318,7 @@ ipcMain.on('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize(
 ipcMain.on('win:close', () => win.close())
 ipcMain.on('ui:ready', () => { sendTabs(); sendBm(); sendExts() })
 
-require('./ai').setup(ipcMain, () => side?.webContents, {
+const ai = require('./ai').setup(ipcMain, () => side?.webContents, {
   wc: () => active()?.view?.webContents,
   list: () => [...tabs.values()].map(t => ({ title: t.title, url: t.url, active: t.id === activeId })),
   open: u => newTab(toUrl(u)),
@@ -335,5 +349,6 @@ app.whenReady().then(async () => {
   setInterval(() => sleepTabs(false), 60000)
   setInterval(meter, 5000)
   setInterval(snap, 500)
+  setInterval(sideSnap, 1500)
 })
 app.on('window-all-closed', () => app.quit())

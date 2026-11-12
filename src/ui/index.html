@@ -6,25 +6,29 @@
 <title>Qat</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-tone="dark">
 <div id="app">
   <aside id="side">
     <header id="chat-head">
       <img src="icon.png" alt="" class="logo">
       <h2>Assistant</h2>
-      <button id="chat-prov" title="Choose model"><span></span><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button>
-      <button id="chat-new" class="btn" title="New chat"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button id="chat-set" class="btn" title="Settings"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+      <div id="head-ctl" class="lg">
+        <button id="chat-prov" title="Choose model"><span></span><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></button>
+        <i class="sep"></i>
+        <button id="chat-new" class="btn" title="New chat"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button id="chat-set" class="btn" title="AI settings"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+        <button id="chat-close" class="btn" title="Close assistant"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
     </header>
     <div id="chat-msgs"></div>
-    <div id="chat-pick" hidden></div>
-    <div id="working" hidden><i class="pulse"></i><span></span><button id="stop" class="chip">Stop</button></div>
-    <div id="chat-composer">
-      <textarea id="chat-in" rows="1" placeholder="Ask anything, or tell me what to do" spellcheck="false"></textarea>
+    <div id="chat-pick" class="lg" hidden></div>
+    <div id="working" class="lg" hidden><i class="pulse"></i><span></span><button id="stop" class="chip">Stop</button></div>
+    <div id="chat-composer" class="lg">
+      <textarea id="chat-in" rows="1" placeholder="Ask about this page, or tell me what to do" spellcheck="false"></textarea>
       <div class="tools">
         <button id="ctx" class="chip" title="The tab the assistant can see"><img alt=""><span></span></button>
         <button id="agent" class="chip" title="Let the assistant click, type and browse in the current tab"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg>Use browser</button>
-        <button id="chat-send" class="btn" title="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-halt" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+        <button id="chat-send" title="Send"><svg class="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="i-halt" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
       </div>
     </div>
   </aside>
@@ -32,5 +36,6 @@
 <script src="app.js"></script>
 <script src="picker.js"></script>
 <script src="chat.js"></script>
+<script src="glass.js"></script>
 </body>
 </html>
