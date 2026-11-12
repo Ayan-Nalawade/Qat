@@ -6,6 +6,7 @@ try { agent = localStorage.agent !== '0' } catch {}
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const I = {
   ok: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', err: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+  globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>',
   chev: '<svg class="chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>', cursor: '<svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg>',
   think: '<svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>',
 }
@@ -38,10 +39,10 @@ function md(src) {
 }
 
 function steps(p, live) {
-  const d = document.createElement('details'), done = p.steps.filter(s => s.state !== 'run').length, bad = p.steps.some(s => s.state === 'err')
+  const d = document.createElement('details'), bad = p.steps.some(s => s.state === 'err'), bg = p.steps.every(s => s.web)
   d.className = 'card lg' + (live ? ' live' : '')
   d.open = live || p.open
-  d.innerHTML = '<summary>' + I.cursor + '<span>' + (live ? 'Using the browser' : 'Used the browser') + ', ' + p.steps.length + ' step' + (p.steps.length > 1 ? 's' : '') + (bad && !live ? ', some failed' : '') + '</span>' + I.chev + '</summary><ol></ol>'
+  d.innerHTML = '<summary>' + (bg ? I.globe : I.cursor) + '<span>' + (bg ? (live ? 'Searching the web' : 'Searched the web') : live ? 'Using the browser' : 'Used the browser') + ', ' + p.steps.length + ' step' + (p.steps.length > 1 ? 's' : '') + (bad && !live ? ', some failed' : '') + '</span>' + I.chev + '</summary><ol></ol>'
   for (const s of p.steps) {
     const li = document.createElement('li')
     li.className = 'step ' + s.state
@@ -88,7 +89,7 @@ function empty() {
     el.querySelector('button').onclick = openSettings
     return el
   }
-  el.insertAdjacentHTML('beforeend', '<p>' + (agent ? 'Or tell it what to do. It can click, type and move around the web in this tab while you watch.' : 'Browser control is off, so it can only chat.') + '</p><div class="sugg"></div>')
+  el.insertAdjacentHTML('beforeend', '<p>' + (agent ? 'Or tell it what to do. It can click and type in this tab while you watch, and looks things up in the background without touching your tabs.' : 'Browser control is off. It can still search the web for you in the background.') + '</p><div class="sugg"></div>')
   for (const [t, q] of SUGG) {
     const b = document.createElement('button')
     b.className = 'lg'
@@ -173,7 +174,7 @@ qat.on('ai:step', d => {
   let p = parts.at(-1)
   if (p?.type !== 'steps') parts.push(p = { type: 'steps', steps: [] })
   const s = p.steps.find(s => s.id === d.id)
-  s ? Object.assign(s, d) : p.steps.push({ id: d.id, label: d.label, state: d.state })
+  s ? Object.assign(s, d) : p.steps.push({ id: d.id, label: d.label, state: d.state, web: d.web })
   redrawLast()
 })
 qat.on('ai:note', d => { if (mine(d)) { msgs.at(-1).parts.push({ type: 'note', text: d.text }); redrawLast() } })
