@@ -44,3 +44,12 @@ qat.ai.settings().then(s => {
   sel.onchange = async () => { cfg = await qat.ai.pick({ provider: sel.value, model: cfg.providers[sel.value].model }) }
   $('#cards').append(...Object.keys(cfg.providers).map(card))
 })
+
+const deep = $('#deep'), dn = $('#deep-note')
+qat.block.get().then(v => deep.checked = v)
+deep.onchange = async () => {
+  deep.disabled = true
+  dn.textContent = deep.checked ? 'Downloading filter lists...' : ''
+  try { await qat.block.set(deep.checked); dn.textContent = deep.checked ? 'Deep scan is on.' : 'Deep scan is off.' } catch (e) { dn.textContent = msgOf(e); deep.checked = !deep.checked }
+  deep.disabled = false
+}
