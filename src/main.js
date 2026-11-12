@@ -11,6 +11,7 @@ app.commandLine.appendSwitch('disable-site-isolation-trials') // cross-site ifra
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,BackForwardCache,IsolateOrigins,site-per-process')
 app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2') // network runs inside the main process, one less process
 app.commandLine.appendSwitch('log-level', '3')
+app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|qat)\/\S+/gi, '') // youtube stalls ~25s before playing for browsers it doesn't recognise
 process.removeAllListeners('warning')
 process.on('warning', w => /Failed to load URL/.test(w.message) || console.warn(w.name + ': ' + w.message))
 
@@ -62,7 +63,7 @@ function attach(tab) {
   const sync = () => { tab.url = wc.getURL() || tab.url; tab.loading = wc.isLoading(); tab.canGoBack = wc.navigationHistory.canGoBack(); tab.canGoForward = wc.navigationHistory.canGoForward(); sendTabs() }
   wc.on('page-title-updated', (e, t) => { tab.title = t; hist.title(wc.getURL(), t); sync() })
   wc.on('did-navigate', (e, u) => { hist.visit(u, tab.typed); tab.typed = false })
-  wc.on('did-start-navigation', e => e.isMainFrame && !e.isSameDocument && block.reset(wc.id))
+  wc.on('did-start-navigation', e => { if (e.isMainFrame && !e.isSameDocument) { block.reset(wc.id); tab.favicon = '' } }) // pages without a favicon would keep the last site's
   wc.on('page-favicon-updated', (e, f) => { tab.favicon = f[0]; sync() })
   for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page']) wc.on(ev, sync)
   keys(wc)
@@ -163,7 +164,7 @@ function meter() {
 
 function createWindow() {
   win = new BaseWindow({
-    width: 1280, height: 820, minWidth: 720, minHeight: 480, frame: false, backgroundColor: '#00000000',
+    width: 1280, height: 820, minWidth: 720, minHeight: 480, frame: false, icon: path.join(__dirname, 'ui', 'icon.png'), backgroundColor: '#00000000',
     ...(process.platform === 'win32' && { backgroundMaterial: 'acrylic' }),
     ...(process.platform === 'darwin' && { vibrancy: 'under-window', visualEffectState: 'active' }),
   })
