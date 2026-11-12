@@ -371,3 +371,4 @@ qat.on('glass:frame', f => { frame = f; want() })
 for (const ev of ['pointerover', 'pointerout', 'focusin', 'focusout']) addEventListener(ev, collect)
 addEventListener('resize', collect)
 qat.ready()
+new ResizeObserver(() => { const r = $('#omni').getBoundingClientRect(); qat.omni(r.x, r.width) }).observe($('#omni')) // quick ask lines up under it

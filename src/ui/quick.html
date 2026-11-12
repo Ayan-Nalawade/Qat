@@ -7,26 +7,27 @@
 <link rel="stylesheet" href="quick.css">
 </head>
 <body data-veil="0" data-tone="dark">
-<section id="sheet" class="lg">
-  <i id="beam"></i>
-  <form id="ask">
-    <span id="mark"><img src="icon.png" alt=""></span>
+<main id="wrap">
+  <form id="ask" class="lg">
+    <svg class="lead" viewBox="0 0 24 24"><path d="M12 4c4.7 0 8 3 8 6.8s-3.3 6.7-8 6.7c-.9 0-1.8-.1-2.6-.3L5 19l1-3.5C4.7 14.3 4 12.6 4 10.8 4 7 7.3 4 12 4z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01" stroke-width="2.6"/></svg>
     <input id="q-in" type="text" autocomplete="off" spellcheck="false" placeholder="Ask or tell Qat what to do">
-    <button type="button" id="mode" class="tag" title="Let it click, type and browse in this tab (Tab)"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg>Browser</button>
-    <button id="q-send" title="Ask (Enter)"><svg class="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg><svg class="i-halt" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+    <button type="button" id="mode" class="ib" title="Browser control (Tab)"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg></button>
+    <button id="q-send" class="ib" title="Ask (Enter)"><svg class="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg><svg class="i-halt" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+    <i id="loadbar"></i>
   </form>
-  <div id="live" hidden><i class="spin"></i><span></span><b></b></div>
-  <div id="ans" hidden>
-    <div id="ans-q"></div>
-    <div id="ans-scroll" data-clip><div id="ans-body"></div></div>
-    <footer id="ans-act">
-      <button id="copy" class="act"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Copy</span></button>
-      <button id="move" class="act"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M14 5v14"/></svg>Continue in assistant</button>
-      <button id="fresh" class="act">New question</button>
-    </footer>
-  </div>
-  <div id="keys"><span><kbd>Enter</kbd>ask</span><span><kbd>Tab</kbd>browser control</span><span><kbd>Esc</kbd>close</span><span id="where"></span></div>
-</section>
+  <section id="card" class="lg" hidden>
+    <div id="live" hidden><i class="spin"></i><span></span><b></b></div>
+    <div id="ans">
+      <div id="ans-q"></div>
+      <div id="ans-scroll" data-clip><div id="ans-body"></div></div>
+      <footer id="ans-act">
+        <button id="copy" class="act"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Copy</span></button>
+        <button id="move" class="act"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M14 5v14"/></svg>Continue in assistant</button>
+        <button id="fresh" class="act"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</button>
+      </footer>
+    </div>
+  </section>
+</main>
 <script src="md.js"></script>
 <script src="quick.js"></script>
 <script src="glass.js"></script>

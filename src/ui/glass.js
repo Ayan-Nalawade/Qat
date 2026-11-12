@@ -30,8 +30,9 @@ void main() {
   if (k < 0) { o = vec4(base * u_a, u_a); return; }
   vec4 r = u_rect[k], m = u_meta[k];
   float e = m.y, d = max(-best, 0.), cov = clamp(.5 - best, 0., 1.);
-  base *= 1. - pow(1. - clamp(best / 12., 0., 1.), 2.) * (.26 - .12 * u_tone) * step(0., best);
-  if (best > .5) { o = vec4(base * u_a, u_a); return; }
+  float shd = pow(1. - clamp(best / 12., 0., 1.), 2.) * (.26 - .12 * u_tone) * step(0., best);
+  base *= 1. - shd;
+  if (best > .5) { o = vec4(base * u_a, u_a + (1. - u_a) * shd); return; } // see-through mode still gets the soft shadow, as plain black
   vec2 h = vec2(.5, 0.);
   vec2 n = normalize(vec2(sdf(p + h.xy, r, m.x) - sdf(p - h.xy, r, m.x), sdf(p + h.yx, r, m.x) - sdf(p - h.yx, r, m.x)) + 1e-5);
   vec3 c = bg(p - n * 12. * pow(1. - clamp(d / 18., 0., 1.), 2.), 1.5); // edge bends the backdrop inwards like a lens
