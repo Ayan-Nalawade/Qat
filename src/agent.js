@@ -308,7 +308,9 @@ function prune(msgs) {
 }
 
 async function run({ base, model, headers, history, agent, quick, signal, out, browser }) {
-  const t = tools(browser, signal), msgs = [{ role: 'system', content: prompt(agent, browser) + (quick ? ' The user asked from the quick ask popup over their page, so answer in a few short sentences or a short list. To answer about their page, fetch its url.' : '') }, ...history]
+  const t = tools(browser, signal), msgs = [{ role: 'system', content: prompt(agent, browser) + (quick ? `
+
+This came from the quick ask bar, not the chat panel. ${agent ? 'If it needs doing, do it in their tab, then' : 'To answer about their page, fetch its url. Then'} reply in a few short sentences or a short list.` : '') }, ...history]
   let useTools = true, images = true, step, stopped
   try {
     for (step = 0; step < 40 && !stopped; step++) {

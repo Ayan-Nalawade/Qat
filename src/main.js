@@ -22,7 +22,7 @@ const HOME = 'https://www.google.com'
 const tabs = new Map()
 const SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
 let STRIP = 88, crx, timers = [] // STRIP grows by a row when the bookmarks bar is on
-let win, bar, side, quick, quickOpen = false, quickBusy = false, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
+let win, bar, side, quick, quickOpen = false, quickBusy = false, quickRun = false, quickH = 140, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
 const live = v => v && !v.webContents.isDestroyed()
 const send = (ch, ...a) => live(side) && side.webContents.send(ch, ...a)
@@ -146,7 +146,7 @@ function sideSnap() {
   wc.capturePage({ x, y: 0, width: pw - x, height: h }).then(img => { img = img.resize({ width: 40, quality: 'good' }); const { width, height } = img.getSize(); send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { sideBusy = false })
 }
 
-// ctrl+space: a see-through layer over the page with its own little ask box, the glass is a blurred copy of the whole page
+// ctrl+space: an ask box hanging off the toolbar, the view is only as big as the box so the page stays usable
 function toggleQuick(open = !quickOpen) {
   if (open && !active()?.view) return
   quickOpen = open
@@ -166,15 +166,18 @@ function showQuick() {
   layout()
   quickSnap()
   quick.webContents.focus()
-  quick.webContents.send('quick:open', { title: active()?.title, url: active()?.url })
+  quick.webContents.send('quick:open', { title: active()?.title, maxH: Math.round((win.getContentBounds().height - STRIP) * .6) })
 }
 function quickSnap() {
   const wc = active()?.view?.webContents
   if (!quickOpen || !live(quick) || quickBusy || !wc || win.isMinimized()) return
   quickBusy = true
-  wc.capturePage().then(img => { img = img.resize({ width: 64, quality: 'good' }); const { width, height } = img.getSize(); live(quick) && quick.webContents.send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { quickBusy = false })
+  const b = quick.getBounds()
+  wc.capturePage({ x: b.x, y: 0, width: b.width, height: b.height }).then(img => { img = img.resize({ width: Math.round(b.width / 8), quality: 'good' }); const { width, height } = img.getSize(); live(quick) && quick.webContents.send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { quickBusy = false })
 }
 ipcMain.on('quick:close', e => e.sender === quick?.webContents && toggleQuick(false))
+ipcMain.on('quick:size', (e, h) => { if (e.sender !== quick?.webContents) return; quickH = Math.max(60, Math.round(h)); layout(); quickSnap() })
+ipcMain.on('quick:run', (e, v) => { if (e.sender === quick?.webContents) quickRun = !!v })
 ipcMain.on('quick:move', (e, m) => {
   if (e.sender !== quick?.webContents) return
   toggleQuick(false)
@@ -196,7 +199,8 @@ function layout() {
   bar.setBounds({ x: 0, y: 0, width: pw, height: barH })
   side?.setBounds({ x: pw, y: 0, width: SIDE, height })
   side?.setVisible(sidebarOpen)
-  quick?.setBounds({ x: 0, y: STRIP, width: pw, height: height - STRIP })
+  const qw = Math.min(800, pw - 24)
+  quick?.setBounds({ x: Math.round((pw - qw) / 2), y: STRIP, width: qw, height: Math.min(quickH, height - STRIP) })
   quick?.setVisible(quickOpen)
 }
 
@@ -222,7 +226,7 @@ function newTab(url = HOME) {
 
 function activate(id) {
   if (!tabs.has(id)) return
-  if (quickOpen) toggleQuick(false)
+  if (quickOpen && !quickRun) toggleQuick(false) // a running quick ask follows the agent into new tabs
   const prev = active()
   if (prev && prev !== tabs.get(id) && prev.view) { win.contentView.removeChildView(prev.view); prev.lastActive = Date.now(); setTimeout(() => purge(prev), 30000) }
   activeId = id
@@ -231,6 +235,7 @@ function activate(id) {
   if (tab.sleeping) { tab.sleeping = false; attach(tab) }
   win.contentView.addChildView(tab.view)
   win.contentView.addChildView(bar)
+  if (quickOpen) win.contentView.addChildView(quick)
   layout()
   heat(1000)
   tab.view.webContents.focus()

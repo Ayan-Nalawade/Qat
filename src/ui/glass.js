@@ -1,9 +1,9 @@
 // same liquid glass as the toolbar: the panel is a muted, blurred copy of the page beside it and every .lg is a glass slab on top
 ;(() => {
-const MAX = 48, cv = document.createElement('canvas'), veil = +document.body.dataset.veil || 0 // veil: see-through backdrop for the quick ask overlay
+const MAX = 48, cv = document.createElement('canvas'), veil = document.body.dataset.veil // set = the page shows through around the slabs, for the quick ask
 cv.id = 'gl'
 document.body.prepend(cv)
-const gl = matchMedia('(prefers-reduced-transparency: reduce)').matches ? null : cv.getContext('webgl2', { alpha: !!veil, premultipliedAlpha: true, antialias: false })
+const gl = matchMedia('(prefers-reduced-transparency: reduce)').matches ? null : cv.getContext('webgl2', { alpha: veil != null, premultipliedAlpha: true, antialias: false })
 document.body.classList.toggle('solid', !gl)
 cv.addEventListener('webglcontextlost', () => document.body.classList.add('solid'))
 let U = {}, items = [], raf = 0, tone = 0, goal = 0
@@ -80,7 +80,7 @@ function draw() {
   gl.uniform2f(U.u_res, innerWidth, innerHeight)
   gl.uniform1f(U.u_dpr, dpr)
   gl.uniform1f(U.u_tone, tone)
-  gl.uniform1f(U.u_a, veil || 1)
+  gl.uniform1f(U.u_a, veil == null ? 1 : +veil)
   gl.uniform1i(U.u_n, items.length)
   gl.uniform4fv(U.u_rect, rects)
   gl.uniform4fv(U.u_meta, meta)
