@@ -4,8 +4,8 @@ const { FiltersEngine, fetchLists } = require('@ghostery/adblocker')
 process.parentPort.once('message', async ({ data: { bin, lists } }) => {
   try {
     const e = FiltersEngine.parse((await fetchLists(fetch, lists)).join('\n'), { enableMutationObserver: true, loadExtendedSelectors: true })
-    fs.writeFileSync(bin, e.serialize())
+    fs.writeFileSync(bin + '.tmp', e.serialize())
+    fs.renameSync(bin + '.tmp', bin)
     process.parentPort.postMessage('')
   } catch (err) { process.parentPort.postMessage(err.message) }
-  process.exit(0)
 })

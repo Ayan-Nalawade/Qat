@@ -18,13 +18,13 @@ async function draw() {
     sw.type = 'checkbox'
     sw.checked = x.on
     sw.title = x.on ? 'Turn off' : 'Turn on'
-    sw.onchange = async () => { await qat.ext.toggle(x.id); draw() }
+    sw.onchange = () => qat.ext.toggle(x.id).catch(e => say(e.message, true)).finally(draw)
     row.append(rm, sw)
     list.append(row)
   }
 }
 
-qat.profiles().then(p => { $('#prof').innerHTML = p.map(x => '<option value="' + x.dir + '"></option>').join(''); [...$('#prof').options].forEach((o, i) => o.textContent = p[i].name); $('#prof').hidden = $('#imp').hidden = !p.length })
+qat.profiles().then(p => { $('#prof').replaceChildren(...p.map(x => Object.assign(document.createElement('option'), { value: x.dir, textContent: x.name }))); $('#prof').hidden = $('#imp').hidden = !p.length })
 $('#imp').onclick = async () => {
   say('Importing...')
   try { const errs = await qat.ext.import($('#prof').value); errs.length ? say("Some didn't load: " + errs.join('; '), true) : say('Done') } catch { say('That Chrome profile has no extensions', true) }

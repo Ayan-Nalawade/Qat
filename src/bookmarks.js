@@ -1,11 +1,12 @@
 const { app } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const put = require('./put')
 
 const file = () => path.join(app.getPath('userData'), 'bookmarks.json')
 let list = []
 try { list = JSON.parse(fs.readFileSync(file(), 'utf8')) } catch {}
-const save = () => fs.writeFile(file(), JSON.stringify(list), () => {})
+const save = () => put(file(), JSON.stringify(list))
 const strip = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 
 module.exports = {
@@ -17,7 +18,7 @@ module.exports = {
     save()
   },
   icon(url, f) { const b = list.find(x => x.url === url); if (!b || b.icon === f) return false; b.icon = f; save(); return true },
-  remove(url) { list = list.filter(b => b.url !== url); save() },
+  remove(url, folder) { list = list.filter(b => b.url !== url || (folder !== undefined && b.folder !== folder)); save() },
   add(items) {
     const seen = new Set(list.map(b => b.url)), fresh = items.filter(b => /^https?:/.test(b.url) && !seen.has(b.url) && seen.add(b.url))
     list.push(...fresh)

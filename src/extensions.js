@@ -1,12 +1,13 @@
 const { app, session } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const put = require('./put')
 
 const dir = () => path.join(app.getPath('userData'), 'extensions')
 const file = () => path.join(app.getPath('userData'), 'extensions.json')
 let list = [] // { id, path, on }
 try { list = JSON.parse(fs.readFileSync(file(), 'utf8')) } catch {}
-const save = () => fs.writeFileSync(file(), JSON.stringify(list, null, 2))
+const save = () => put(file(), JSON.stringify(list, null, 2))
 const ext = () => session.defaultSession.extensions
 const load = p => ext().loadExtension(p, { allowFileAccess: true })
 

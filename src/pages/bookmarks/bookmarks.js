@@ -15,7 +15,7 @@ async function draw() {
       const row = el('div', 'item'), a = el('a', 'txt'), x = el('button', 'pill', 'Remove')
       a.href = b.url
       a.append(el('b', 'url', b.title), el('small', 'url', b.url))
-      x.onclick = async () => { await qat.bm.remove(b.url); draw() }
+      x.onclick = async () => { await qat.bm.remove(b.url, b.folder); draw() }
       row.append(a, x)
       box.append(row)
     }
@@ -23,7 +23,7 @@ async function draw() {
   }
 }
 
-qat.profiles().then(p => { $('#prof').innerHTML = p.map(x => '<option value="' + x.dir + '"></option>').join(''); [...$('#prof').options].forEach((o, i) => o.textContent = p[i].name); $('#prof').hidden = $('#imp').hidden = !p.length })
+qat.profiles().then(p => { $('#prof').replaceChildren(...p.map(x => Object.assign(document.createElement('option'), { value: x.dir, textContent: x.name }))); $('#prof').hidden = $('#imp').hidden = !p.length })
 $('#imp').onclick = async () => {
   try { const n = await qat.bm.import($('#prof').value); note.textContent = n ? 'Imported ' + n + ' bookmarks' : 'Nothing new to import' } catch { note.textContent = 'That Chrome profile has no bookmarks file' }
   draw()

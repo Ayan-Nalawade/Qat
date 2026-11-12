@@ -17,9 +17,10 @@ module.exports = {
     const base = path.join(root(), dir, 'Extensions'), out = []
     for (const id of fs.readdirSync(base)) {
       if (!/^[a-p]{32}$/.test(id)) continue
-      const vers = fs.readdirSync(path.join(base, id)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-      const p = path.join(base, id, vers.at(-1))
-      try { if (!json(path.join(p, 'manifest.json')).theme) out.push({ id, path: p }) } catch {}
+      try {
+        const v = fs.readdirSync(path.join(base, id)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).at(-1), p = path.join(base, id, v)
+        if (!json(path.join(p, 'manifest.json')).theme) out.push({ id, path: p })
+      } catch {} // half uninstalled ones are empty folders
     }
     return out
   },

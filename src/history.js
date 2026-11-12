@@ -1,6 +1,7 @@
 const { app } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const put = require('./put')
 
 const file = () => path.join(app.getPath('userData'), 'history.json')
 let h = new Map(), timer
@@ -9,16 +10,18 @@ try { h = new Map(JSON.parse(fs.readFileSync(file(), 'utf8')).map(e => [e.u, e])
 const strip = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 const score = e => (e.n + 3 * (e.k || 0)) / (1 + (Date.now() - e.v) / 6048e5) // typed counts more, a week halves it
 
-function save() {
+function flush() {
+  if (!timer) return
   clearTimeout(timer)
-  timer = setTimeout(() => {
-    const all = [...h.values()].sort((a, b) => b.v - a.v).slice(0, 5000)
-    h = new Map(all.map(e => [e.u, e]))
-    fs.writeFile(file(), JSON.stringify(all), () => {})
-  }, 4000)
+  timer = null
+  const all = [...h.values()].sort((a, b) => b.v - a.v).slice(0, 5000)
+  h = new Map(all.map(e => [e.u, e]))
+  put(file(), JSON.stringify(all))
 }
+const save = () => { clearTimeout(timer); timer = setTimeout(flush, 4000) }
 
 module.exports = {
+  flush,
   visit(u, typed) {
     if (!/^https?:/.test(u)) return
     const e = h.get(u) || { u, t: '', n: 0 }
