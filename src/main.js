@@ -11,7 +11,7 @@ app.commandLine.appendSwitch('disable-site-isolation-trials') // cross-site ifra
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,BackForwardCache,IsolateOrigins,site-per-process')
 app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2') // network runs inside the main process, one less process
 app.commandLine.appendSwitch('log-level', '3')
-app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|qat)\/\S+/gi, '') // youtube stalls ~25s before playing for browsers it doesn't recognise
+app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|qat)\/\S+/gi, '') // some video sites stall ~25s before playing for browsers they don't recognise
 app.setAppUserModelId('qat.browser') // own taskbar group, otherwise windows shows electron.exe's icon
 process.removeAllListeners('warning')
 process.on('warning', w => /Failed to load URL/.test(w.message) || console.warn(w.name + ': ' + w.message))
@@ -19,14 +19,14 @@ process.on('warning', w => /Failed to load URL/.test(w.message) || console.warn(
 const SLEEP_MS = 3 * 60 * 1000
 const HOME = 'https://www.google.com'
 const tabs = new Map()
-const STRIP = 52, SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
-let win, bar, side, barH = 52, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
+const STRIP = 88, SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
+let win, bar, side, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
 const send = (ch, ...a) => side?.webContents.send(ch, ...a)
 const ui = () => new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } })
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
 const toBar = (ch, ...a) => bar.webContents.send(ch, ...a)
-const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url) })) })
+const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) })
 const active = () => tabs.get(activeId)
 
 function toUrl(s) {
@@ -47,8 +47,21 @@ function shortcut(input) {
   else if (input.alt && k === 'arrowleft') active().view?.webContents.navigationHistory.goBack()
   else if (input.alt && k === 'arrowright') active().view?.webContents.navigationHistory.goForward()
   else if (c && input.shift && k === 'i') active().view?.webContents.toggleDevTools()
+  else if (c && (k === '=' || k === '+')) zoom(1)
+  else if (c && k === '-') zoom(-1)
+  else if (c && k === '0') zoom(0)
+  else if (k === 'f11') win.setFullScreen(!win.isFullScreen())
   else return false
   return true
+}
+
+const ZOOMS = [.25, .33, .5, .67, .75, .8, .9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5] // chrome's steps
+function zoom(d) {
+  const wc = active().view?.webContents
+  if (!wc) return
+  const i = ZOOMS.findIndex(z => z >= wc.getZoomFactor() - .001)
+  wc.setZoomFactor(d ? ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i + d))] : 1)
+  sendTabs()
 }
 
 function focusOmnibox() { bar.webContents.focus(); toBar('focus-omnibox') }
@@ -186,7 +199,7 @@ ipcMain.on('tab:activate', (e, id) => activate(id))
 ipcMain.on('nav:go', (e, text) => { active().typed = true; active().view.webContents.loadURL(toUrl(text)).catch(() => {}) })
 ipcMain.on('bar:height', (e, h) => { barH = Math.max(STRIP, Math.min(h, win.getContentBounds().height)); layout() })
 ipcMain.on('shield:toggle', () => { const t = active(); block.toggle(t.url); block.reset(t.view.webContents.id); t.view.webContents.reload(); sendTabs() })
-ipcMain.on('yt:skip', (e, x, y) => { // only from youtube's top frame, and only a click
+ipcMain.on('ad:skip', (e, x, y) => { // a real click for deep-preload, only from the one site it runs on and only its top frame
   if (!/(^|\.)youtube\.com$/.test(new URL(e.senderFrame.url).hostname) || e.senderFrame.parent) return
   for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) e.sender.sendInputEvent({ type, x, y, button: 'left', clickCount: 1 })
 })
@@ -214,6 +227,10 @@ ipcMain.on('side:toggle', () => {
   if (sidebarOpen) side.webContents.focus()
 })
 ipcMain.on('mem:sleep-all', () => sleepTabs(true))
+ipcMain.on('menu', (e, a) => ({
+  new: () => newTab(), settings: () => newTab('qat://settings'), sleep: () => sleepTabs(true), dev: () => active().view?.webContents.toggleDevTools(),
+  zin: () => zoom(1), zout: () => zoom(-1), full: () => win.setFullScreen(!win.isFullScreen()),
+})[a]?.())
 ipcMain.on('win:min', () => win.minimize())
 ipcMain.on('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize())
 ipcMain.on('win:close', () => win.close())

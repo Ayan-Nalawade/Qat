@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s)
 const omni = $('#omnibox'), tabsEl = $('#tabs'), cv = $('#gl')
-const MAX = 32, BH = 52
+const MAX = 32, BH = 88
 let state = { tabs: [], activeId: null }
 const X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'
 
@@ -28,6 +28,7 @@ function render() {
   sh.classList.toggle('na', !web)
   sh.classList.toggle('off', !cur.shield)
   sh.title = cur.shield ? cur.blocked + ' ads and trackers blocked. Click to allow ads on this site' : 'Ad blocker off for this site. Click to turn it back on'
+  $('#zoom-val').textContent = (cur.zoom || 100) + '%'
   $('#shield-n').textContent = cur.shield && cur.blocked ? (cur.blocked > 999 ? '999+' : cur.blocked) : ''
   watchRects()
 }
@@ -59,8 +60,23 @@ function show(list) {
   const r = $('#omni').getBoundingClientRect()
   Object.assign(drop.style, { left: r.x + 'px', width: r.width + 'px' })
   drop.dataset.tone = $('#omni').dataset.tone || 'dark'
-  qat.barHeight(sugg.length ? Math.ceil(drop.getBoundingClientRect().bottom) + 16 : BH)
+  fit()
 }
+
+// the bar view grows while a popup is open so it can hang over the page
+const fit = () => qat.barHeight(Math.max(BH, ...[...document.querySelectorAll('.pop:not([hidden])')].map(p => Math.ceil(p.getBoundingClientRect().bottom) + 16)))
+
+const menu = $('#menu'), mbtn = $('#menu-btn')
+function openMenu(on) {
+  menu.hidden = !on
+  mbtn.classList.toggle('on', on)
+  if (on) { const r = mbtn.getBoundingClientRect(); menu.style.left = Math.min(r.right, innerWidth - 8) - 280 + 'px'; menu.dataset.tone = mbtn.dataset.tone || 'dark' }
+  fit()
+}
+mbtn.onclick = () => openMenu(menu.hidden)
+menu.onclick = e => { const a = e.target.closest('[data-a]')?.dataset.a; if (!a) return; qat.menu(a); if (!['zin', 'zout'].includes(a)) openMenu(false) }
+addEventListener('keydown', e => e.key === 'Escape' && !menu.hidden && openMenu(false))
+addEventListener('blur', () => openMenu(false))
 
 function build(m, g = []) {
   const v = omni.value, list = [looksUrl(v) ? { kind: 'url', text: v, url: v } : { kind: 'search', text: v, title: v + ' - Google Search', url: gsearch(v) }], seen = new Set([bare(v)])
@@ -93,7 +109,7 @@ omni.addEventListener('keydown', e => {
 })
 omni.addEventListener('focus', () => omni.select())
 omni.addEventListener('blur', () => { seq++; clearTimeout(gt); show([]); state.activeId && render() })
-addEventListener('mousedown', e => (e.target === document.body || e.target === document.documentElement) && omni.blur())
+addEventListener('mousedown', e => { if (e.target === document.body || e.target === document.documentElement) omni.blur(); if (!menu.hidden && !e.target.closest('#menu, #menu-btn')) openMenu(false) })
 $('#shield').onclick = qat.shield
 $('#back').onclick = qat.back
 $('#forward').onclick = qat.forward
@@ -132,7 +148,7 @@ void main() {
   bg = mix(bg, blur(p, 24.), .6);
   if (k < 0) { o = vec4(bg, 1); return; }
   vec4 r = u_rect[k]; float e = u_emph[k], tn = u_tone[k];
-  bg *= 1. - pow(1. - clamp(best / 9., 0., 1.), 2.) * (.14 + .12 * tn) * step(0., best);
+  bg *= 1. - pow(1. - clamp(best / 9., 0., 1.), 2.) * (.14 + .16 * tn) * step(0., best);
   if (best > .5) { o = vec4(bg, 1); return; }
   float cov = clamp(.5 - best, 0., 1.), d = max(-best, 0.);
   vec2 h = vec2(.5, 0.);
@@ -148,8 +164,9 @@ void main() {
   float spec = (1. - smoothstep(0., 1.8, d)) * (.25 + .6 * max(L, 0.) + .25 * max(-L, 0.)) * (1. + .5 * e);
   float glow = pow(1. - clamp(d / 8., 0., 1.), 3.) * .12 * max(L, 0.);
   c += spec + glow + .05 * (1. - (p.y - r.y) / r.w);
-  c = mix(c, c * .82, (1. - smoothstep(0., 1.2, d)) * tn); // darker rim edge on light backdrops
-  o = vec4(mix(bg, clamp(c, 0., 1.), cov), 1);
+  c = clamp(c, 0., 1.); // clamp first or the light-backdrop rim below darkens >1 values back to pure white
+  c = mix(c, c * .8, (1. - smoothstep(0., 1.4, d)) * tn);
+  o = vec4(mix(bg, c, cov), 1);
 }`))
   gl.linkProgram(pr)
   gl.useProgram(pr)
