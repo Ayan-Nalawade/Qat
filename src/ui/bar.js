@@ -153,6 +153,8 @@ qat.on('bookmarks', d => {
 })
 addEventListener('resize', () => bmd.show && overflow())
 
+const rect = el => { const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } }
+
 function fillExt() {
   const full = exts.filter(x => x.pin).length >= 4
   extmenu.innerHTML = ''
@@ -163,7 +165,7 @@ function fillExt() {
     pin.title = x.pin ? 'Unpin from toolbar' : full ? 'Toolbar is full, unpin one first' : 'Pin to toolbar'
     pin.disabled = !x.pin && full
     pin.onclick = e => { e.stopPropagation(); qat.extPin(x.id) }
-    r.onclick = () => { openPop(null); qat.extOpen(x.id, Math.round($('#ext-more').getBoundingClientRect().right)) }
+    r.onclick = () => { openPop(null); qat.extOpen(x.id, rect($('#ext-more'))) }
     extmenu.append(r)
   }
   const m = mk('div', 'er')
@@ -180,7 +182,7 @@ qat.on('exts', l => {
     const b = mk('button', 'ib')
     b.title = x.name
     b.append(Object.assign(mk('img'), { src: x.icon || 'icon.png', alt: '' }))
-    b.onclick = () => qat.extOpen(x.id, Math.round(b.getBoundingClientRect().right))
+    b.onclick = () => qat.extOpen(x.id, rect(b))
     return b
   }))
   if (!extmenu.hidden) fillExt()

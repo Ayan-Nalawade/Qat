@@ -1,4 +1,5 @@
-const { app, components, BaseWindow, WebContentsView, ipcMain, protocol, net, screen, dialog, session } = require('electron')
+const { app, components, BaseWindow, WebContentsView, ipcMain, protocol, net, screen, dialog, session, Menu, clipboard } = require('electron')
+const { ElectronChromeExtensions } = require('electron-chrome-extensions')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -20,15 +21,16 @@ const SLEEP_MS = 3 * 60 * 1000
 const HOME = 'https://www.google.com'
 const tabs = new Map()
 const SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
-let STRIP = 88, pop, popId, popShut = 0 // STRIP grows by a row when the bookmarks bar is on
+let STRIP = 88, crx // STRIP grows by a row when the bookmarks bar is on
 let win, bar, side, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
 const send = (ch, ...a) => side?.webContents.send(ch, ...a)
 const ui = () => new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } })
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
 const toBar = (ch, ...a) => bar.webContents.send(ch, ...a)
-const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) })
+const sendTabs = () => (send('ai:tab', { title: active()?.title, url: active()?.url, favicon: active()?.favicon }), toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) }))
 const active = () => tabs.get(activeId)
+const tabOf = wc => [...tabs.values()].find(t => t.view?.webContents === wc)
 const SET = () => path.join(app.getPath('userData'), 'settings.json')
 const conf = (k, v) => { let s = {}; try { s = JSON.parse(fs.readFileSync(SET(), 'utf8')) } catch {} if (v === undefined) return s[k]; s[k] = v; fs.writeFileSync(SET(), JSON.stringify(s, null, 2)) }
 
@@ -46,27 +48,6 @@ function sendBm() {
   toBar('bookmarks', { show: conf('bookmarksBar') !== false && bm.all().length > 0, items, other })
 }
 const sendExts = () => toBar('exts', ext.list().filter(x => x.on).map(({ id, name, icon, pin, popup, options }) => ({ id, name, icon, pin, popup: !!(popup || options) })))
-
-function shut() { const p = pop; if (!p) return; pop = null; popShut = Date.now(); win.contentView.removeChildView(p); p.webContents.close() }
-
-function extPopup(id, right) {
-  const reopen = popId === id && Date.now() - popShut < 300 // clicking the icon blurs the open popup first, so that click means close
-  shut()
-  if (reopen) return
-  const x = ext.list().find(e => e.id === id)
-  if (!x?.popup) return x?.options && newTab(x.options)
-  popId = id
-  pop = new WebContentsView({ webPreferences: { enablePreferredSizeMode: true, spellcheck: false, contextIsolation: false, preload: path.join(__dirname, 'popup-preload.js') } })
-  const wc = pop.webContents
-  pop.setBackgroundColor('#ffffff')
-  pop.setBounds({ x: right - 1, y: 50, width: 1, height: 1 })
-  win.contentView.addChildView(pop)
-  wc.on('preferred-size-changed', (e, s) => { const w = Math.min(Math.max(s.width, 25), 800), h = Math.min(Math.max(s.height, 25), 600); pop?.setBounds({ x: Math.max(0, right - w), y: 50, width: w, height: h }) })
-  wc.once('did-finish-load', () => wc.on('blur', shut)) // adding the view hands it focus for a moment, that blur isn't a click away
-  wc.setWindowOpenHandler(({ url }) => { newTab(url); return { action: 'deny' } })
-  keys(wc)
-  wc.loadURL(x.popup).catch(shut)
-}
 
 function toUrl(s) {
   s = s.trim()
@@ -125,7 +106,9 @@ function attach(tab) {
   for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page']) wc.on(ev, sync)
   keys(wc)
   wc.setWindowOpenHandler(({ url }) => { newTab(url); return { action: 'deny' } })
-  wc.on('input-event', (e, i) => { if (tab !== active()) return; heat(i.type === 'mouseMove' ? 100 : 700); i.type === 'mouseDown' && shut() })
+  wc.on('input-event', (e, i) => tab === active() && heat(i.type === 'mouseMove' ? 100 : 700))
+  wc.on('context-menu', (e, p) => menu(wc, p))
+  crx.addTab(wc, win)
   for (const ev of ['did-stop-loading', 'did-navigate-in-page', 'dom-ready']) wc.on(ev, () => tab === active() && heat(1500))
   if (tab.hist) wc.navigationHistory.restore(tab.hist).catch(() => {})
   else wc.loadURL(tab.url).catch(() => {})
@@ -163,6 +146,19 @@ function layout() {
   side?.setVisible(sidebarOpen)
 }
 
+function menu(wc, p) { // chrome's right click basics plus whatever extensions added
+  const h = wc.navigationHistory, t = []
+  if (p.linkURL) t.push({ label: 'Open link in new tab', click: () => newTab(p.linkURL) }, { label: 'Copy link address', click: () => clipboard.writeText(p.linkURL) }, { type: 'separator' })
+  if (p.mediaType === 'image') t.push({ label: 'Open image in new tab', click: () => newTab(p.srcURL) }, { label: 'Copy image', click: () => wc.copyImageAt(p.x, p.y) }, { type: 'separator' })
+  if (p.isEditable) t.push({ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' })
+  else if (p.selectionText) t.push({ role: 'copy' }, { label: 'Search Google for "' + p.selectionText.trim().slice(0, 30) + '"', click: () => newTab(toUrl(p.selectionText)) })
+  else t.push({ label: 'Back', enabled: h.canGoBack(), click: () => h.goBack() }, { label: 'Forward', enabled: h.canGoForward(), click: () => h.goForward() }, { label: 'Reload', click: () => wc.reload() })
+  const x = crx.getContextMenuItems(wc, p)
+  if (x.length) t.push({ type: 'separator' }, ...x)
+  t.push({ type: 'separator' }, { label: 'Inspect', click: () => wc.inspectElement(p.x, p.y) })
+  Menu.buildFromTemplate(t).popup()
+}
+
 function newTab(url = HOME) {
   const tab = { id: nextId++, title: 'New Tab', url, favicon: '', loading: true, canGoBack: false, canGoForward: false, sleeping: false, lastActive: Date.now() }
   tabs.set(tab.id, tab)
@@ -182,6 +178,7 @@ function activate(id) {
   layout()
   heat(1000)
   tab.view.webContents.focus()
+  crx.selectTab(tab.view.webContents)
   sendTabs()
 }
 
@@ -229,7 +226,6 @@ function createWindow() {
   win.contentView.addChildView(bar)
   bar.webContents.loadFile(path.join(__dirname, 'ui', 'bar.html'))
   keys(bar.webContents)
-  bar.webContents.on('input-event', (e, i) => i.type === 'mouseDown' && shut())
   win.on('maximize', () => toBar('maximized', true))
   win.on('unmaximize', () => toBar('maximized', false))
   win.on('resize', layout)
@@ -265,8 +261,8 @@ qh('ext:remove', then(id => ext.remove(id)))
 qh('ext:import', then(d => ext.import(chrome.extensions(d))))
 qh('ext:load', then(async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Pick an unpacked extension folder' }); return r.canceled ? null : ext.add(r.filePaths[0]) }))
 const fromBar = f => (e, ...a) => e.sender === bar.webContents && f(...a)
-ipcMain.on('ext:popup', fromBar(extPopup))
-ipcMain.on('ext:tab', e => { e.returnValue = e.sender === pop?.webContents ? active().view?.webContents.id ?? -1 : -1 })
+let shutAt = 0, shutId // clicking the icon of an open popup blurs it shut first, that click shouldn't reopen it
+ipcMain.on('ext:popup', fromBar((id, r) => (id !== shutId || Date.now() - shutAt > 300) && crx.api.browserAction.activateClick({ extensionId: id, tabId: active().view?.webContents.id ?? -1, anchorRect: r })))
 ipcMain.on('ext:pin', fromBar(id => { ext.pin(id); sendExts() }))
 ipcMain.on('bar:strip', fromBar(h => { STRIP = h; layout(); heat(500) }))
 qh('ext:open', u => /^chrome-extension:\/\//.test(u) && newTab(u))
@@ -290,7 +286,7 @@ ipcMain.on('side:toggle', () => {
     side.setBackgroundColor('#00000000')
     keys(side.webContents)
     side.webContents.loadFile(path.join(__dirname, 'ui', 'index.html'))
-    side.webContents.once('did-finish-load', () => { send('side', sidebarOpen); sidebarOpen && side.webContents.focus() })
+    side.webContents.once('did-finish-load', () => { send('side', sidebarOpen); sendTabs(); sidebarOpen && side.webContents.focus() })
     win.contentView.addChildView(side)
   }
   layout()
@@ -308,7 +304,13 @@ ipcMain.on('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize(
 ipcMain.on('win:close', () => win.close())
 ipcMain.on('ui:ready', () => { sendTabs(); sendBm(); sendExts() })
 
-require('./ai').setup(ipcMain, () => side?.webContents)
+require('./ai').setup(ipcMain, () => side?.webContents, {
+  wc: () => active()?.view?.webContents,
+  list: () => [...tabs.values()].map(t => ({ title: t.title, url: t.url, active: t.id === activeId })),
+  open: u => newTab(toUrl(u)),
+  switchTo: i => { const t = [...tabs.values()][i]; if (!t) throw new Error('No tab ' + i); activate(t.id) },
+  close: i => { const t = [...tabs.values()][i]; if (!t) throw new Error('No tab ' + i); closeTab(t.id) },
+})
 
 function qatFile(req) {
   const u = new URL(req.url), p = decodeURIComponent(u.pathname), ui = path.join(__dirname, 'ui'), pages = path.join(__dirname, 'pages')
@@ -320,6 +322,13 @@ function qatFile(req) {
 app.whenReady().then(async () => {
   await components.whenReady().catch(e => console.warn('widevine: ' + e.message)) // castlabs build fetches the cdm on first run so drm video plays
   protocol.handle('qat', req => { const f = qatFile(req); return f ? net.fetch(pathToFileURL(f).toString()) : new Response('Not found', { status: 404 }) })
+  crx = new ElectronChromeExtensions({ // fills in the chrome.* apis electron lacks: tabs, windows, webNavigation, contextMenus, action popups
+    createTab: d => { newTab(d.url || HOME); return [active().view.webContents, win] },
+    selectTab: wc => { const t = tabOf(wc); t && activate(t.id) },
+    removeTab: wc => { const t = tabOf(wc); t && closeTab(t.id) },
+    createWindow: d => { newTab([d.url].flat()[0] || HOME); return win },
+  })
+  crx.on('browser-action-popup-created', p => p.browserWindow.once('closed', () => { shutAt = Date.now(); shutId = p.extensionId }))
   await ext.start()
   block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   createWindow()

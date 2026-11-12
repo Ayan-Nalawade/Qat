@@ -12,6 +12,7 @@
     "electron": "github:castlabs/electron-releases#v45.2.1+wvcus"
   },
   "dependencies": {
-    "@ghostery/adblocker-electron": "^2.20.3"
+    "@ghostery/adblocker-electron": "^2.20.3",
+    "electron-chrome-extensions": "^4.10.0"
   }
 }
