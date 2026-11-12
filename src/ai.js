@@ -2,7 +2,7 @@ const { app, safeStorage } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
-const SYSTEM = 'You are Qat, a helpful assistant built into a web browser. Be concise.'
+const { run } = require('./agent')
 const PROVIDERS = {
   nvidia: { name: 'NVIDIA NIM', base: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct' },
   openrouter: { name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', model: 'openrouter/auto', headers: { 'HTTP-Referer': 'https://github.com/Ayan-Nalawade/Qat', 'X-Title': 'Qat' } },
@@ -28,7 +28,7 @@ function pub() {
 
 const headers = (id, c) => ({ 'Content-Type': 'application/json', ...(c.key && { Authorization: 'Bearer ' + c.key }), ...PROVIDERS[id].headers })
 
-function setup(ipcMain, ui) {
+function setup(ipcMain, ui, browser) {
   const runs = new Map()
   const ok = e => e.sender === ui() || !!e.senderFrame?.url.startsWith('qat://')
   const handle = (ch, f) => ipcMain.handle(ch, (e, ...a) => ok(e) ? f(e, ...a) : undefined)
@@ -63,33 +63,10 @@ function setup(ipcMain, ui) {
     return (j.data || j).map(m => m.id).sort()
   })
 
-  on('ai:chat', async (e, { rid, messages }) => {
+  on('ai:chat', async (e, { rid, messages, agent }) => {
     const id = pub().provider, c = conf(id), ac = new AbortController()
     runs.set(rid, ac)
-    const out = (ch, d) => e.sender.isDestroyed() || e.sender.send(ch, { rid, ...d })
-    const feed = l => {
-      l = l.trim()
-      if (!l.startsWith('data:')) return
-      const d = l.slice(5).trim()
-      if (d === '[DONE]') return
-      try { const t = JSON.parse(d).choices?.[0]?.delta?.content; if (t) out('ai:chunk', { text: t }) } catch {}
-    }
-    try {
-      const r = await fetch(c.base + '/chat/completions', { method: 'POST', headers: headers(id, c), signal: ac.signal, body: JSON.stringify({ model: c.model, stream: true, messages: [{ role: 'system', content: SYSTEM }, ...messages] }) })
-      if (!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 500)}`)
-      const dec = new TextDecoder()
-      let buf = ''
-      for await (const chunk of r.body) {
-        buf += dec.decode(chunk, { stream: true })
-        const lines = buf.split('\n')
-        buf = lines.pop()
-        lines.forEach(feed)
-      }
-      feed(buf)
-      out('ai:done')
-    } catch (err) {
-      ac.signal.aborted ? out('ai:done') : out('ai:error', { message: err.message + (err.cause ? ': ' + err.cause.message : '') })
-    }
+    await run({ base: c.base, model: c.model, headers: headers(id, c), history: messages, agent, signal: ac.signal, browser, out: (ch, d) => e.sender.isDestroyed() || e.sender.send(ch, { rid, ...d }) })
     runs.delete(rid)
   })
 
