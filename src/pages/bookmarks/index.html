@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' qat:; img-src 'self' qat: data: https:; style-src 'self' qat: 'unsafe-inline'">
+<title>Bookmarks</title>
+<link rel="icon" href="qat://settings/shared/icon.png">
+<link rel="stylesheet" href="qat://settings/shared/style.css">
+<link rel="stylesheet" href="qat://settings/settings.css">
+</head>
+<body>
+<nav>
+  <div class="brand"><img src="qat://settings/shared/icon.png" alt=""><span>Bookmarks</span></div>
+  <a href="qat://settings">Settings</a>
+  <a href="qat://bookmarks" class="on">Bookmarks</a>
+  <a href="qat://extensions">Extensions</a>
+</nav>
+<main>
+  <h2>Bookmarks</h2>
+  <div class="bar">
+    <input id="q" class="ctl" placeholder="Search bookmarks" spellcheck="false" autocomplete="off">
+    <select id="prof" class="ctl"></select>
+    <button type="button" class="pill" id="imp">Import from Chrome</button>
+  </div>
+  <small class="note" id="note"></small>
+  <div id="list"></div>
+</main>
+<script src="bookmarks.js"></script>
+</body>
+</html>

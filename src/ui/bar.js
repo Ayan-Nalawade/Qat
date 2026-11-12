@@ -28,6 +28,9 @@ function render() {
   sh.classList.toggle('na', !web)
   sh.classList.toggle('off', !cur.shield)
   sh.title = cur.shield ? cur.blocked + ' ads and trackers blocked. Click to allow ads on this site' : 'Ad blocker off for this site. Click to turn it back on'
+  $('#star').classList.toggle('na', !web)
+  $('#star').classList.toggle('on', !!cur.starred)
+  $('#star').title = cur.starred ? 'Remove bookmark' : 'Bookmark this tab (Ctrl+D)'
   $('#zoom-val').textContent = (cur.zoom || 100) + '%'
   $('#shield-n').textContent = cur.shield && cur.blocked ? (cur.blocked > 999 ? '999+' : cur.blocked) : ''
   watchRects()
@@ -40,7 +43,7 @@ qat.on('focus-omnibox', () => { omni.focus(); omni.select() })
 qat.on('maximized', m => { $('#w-max').title = m ? 'Restore' : 'Maximize' })
 
 const drop = $('#drop'), looksUrl = s => /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^localhost(:\d+)?([/?#]|$)/i.test(s) || (!/\s/.test(s) && s.includes('.'))
-const ICON = { url: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>', search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>' }
+const ICON = { url: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>', star: '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>', search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>' }
 const gsearch = q => 'https://www.google.com/search?q=' + encodeURIComponent(q), bare = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 let sugg = [], sel = -1, typed = '', seq = 0, gt
 
@@ -50,7 +53,7 @@ function show(list) {
   for (const s of sugg) {
     const el = document.createElement('div')
     el.className = 'sg'
-    el.innerHTML = ICON[s.kind] + '<span class="t"></span><span class="u"></span>'
+    el.innerHTML = ICON[s.star ? 'star' : s.kind] + '<span class="t"></span><span class="u"></span>'
     el.querySelector('.t').textContent = s.title || s.text
     el.querySelector('.u').textContent = s.title ? s.text : ''
     el.onmousedown = e => { e.preventDefault(); go(s) }
@@ -80,7 +83,7 @@ addEventListener('blur', () => openMenu(false))
 
 function build(m, g = []) {
   const v = omni.value, list = [looksUrl(v) ? { kind: 'url', text: v, url: v } : { kind: 'search', text: v, title: v + ' - Google Search', url: gsearch(v) }], seen = new Set([bare(v)])
-  for (const h of m.items) if (!seen.has(bare(h.url))) { seen.add(bare(h.url)); list.push({ kind: 'url', text: bare(h.url), title: h.title, url: h.url }) }
+  for (const h of m.items) if (!seen.has(bare(h.url))) { seen.add(bare(h.url)); list.push({ kind: 'url', text: bare(h.url), title: h.title, url: h.url, star: h.star }) }
   for (const q of g) if (q !== typed) list.push({ kind: 'search', text: q, url: gsearch(q) })
   return list
 }
@@ -111,6 +114,7 @@ omni.addEventListener('focus', () => omni.select())
 omni.addEventListener('blur', () => { seq++; clearTimeout(gt); show([]); state.activeId && render() })
 addEventListener('mousedown', e => { if (e.target === document.body || e.target === document.documentElement) omni.blur(); if (!menu.hidden && !e.target.closest('#menu, #menu-btn')) openMenu(false) })
 $('#shield').onclick = qat.shield
+$('#star').onclick = qat.star
 $('#back').onclick = qat.back
 $('#forward').onclick = qat.forward
 $('#reload').onclick = qat.reload

@@ -1,9 +1,9 @@
-const { app, components, BaseWindow, WebContentsView, ipcMain, protocol, net, screen } = require('electron')
+const { app, components, BaseWindow, WebContentsView, ipcMain, protocol, net, screen, dialog, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { pathToFileURL } = require('url')
-const block = require('./block'), hist = require('./history')
+const block = require('./block'), hist = require('./history'), bm = require('./bookmarks'), ext = require('./extensions'), chrome = require('./chrome')
 protocol.registerSchemesAsPrivileged([{ scheme: 'qat', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 app.commandLine.appendSwitch('process-per-site')
 app.commandLine.appendSwitch('renderer-process-limit', '6')
@@ -26,7 +26,7 @@ const send = (ch, ...a) => side?.webContents.send(ch, ...a)
 const ui = () => new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } })
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
 const toBar = (ch, ...a) => bar.webContents.send(ch, ...a)
-const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) })
+const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) })
 const active = () => tabs.get(activeId)
 
 function toUrl(s) {
@@ -42,6 +42,7 @@ function shortcut(input) {
   if (c && !input.shift && !input.alt && k === 't') newTab()
   else if (c && k === 'w') closeTab(activeId)
   else if (c && k === 'l') focusOmnibox()
+  else if (c && k === 'd') star()
   else if ((c && k === 'r') || k === 'f5') active().view?.webContents.reload()
   else if (c && k === 'tab') cycle(input.shift ? -1 : 1)
   else if (input.alt && k === 'arrowleft') active().view?.webContents.navigationHistory.goBack()
@@ -63,6 +64,8 @@ function zoom(d) {
   wc.setZoomFactor(d ? ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i + d))] : 1)
   sendTabs()
 }
+
+function star() { const t = active(); if (/^https?:/.test(t.url)) { bm.toggle(t.url, t.title); sendTabs() } }
 
 function focusOmnibox() { bar.webContents.focus(); toBar('focus-omnibox') }
 
@@ -205,7 +208,34 @@ ipcMain.on('ad:skip', (e, x, y) => { // a real click for deep-preload, only from
 const qatPage = e => !!e.senderFrame?.url.startsWith('qat://')
 ipcMain.handle('block:get', e => qatPage(e) ? block.deep() : undefined)
 ipcMain.handle('block:set', (e, v) => qatPage(e) ? block.setDeep(v) : undefined)
-ipcMain.handle('omni:match', (e, q) => hist.match(q))
+ipcMain.handle('omni:match', (e, q) => {
+  const m = hist.match(q), b = bm.match(q).map(x => ({ url: x.url, title: x.title, star: true }))
+  const strip = u => u.replace(/^https?:\/\/(www\.)?/, '')
+  if (!m.inline) m.inline = b.map(x => strip(x.url)).find(u => u.startsWith(q.trim().toLowerCase())) || ''
+  m.items = [...b, ...m.items.filter(i => !b.some(x => x.url === i.url))].slice(0, 6)
+  return m
+})
+ipcMain.on('star:toggle', star)
+const qh = (ch, f) => ipcMain.handle(ch, (e, ...a) => qatPage(e) ? f(...a) : undefined)
+qh('chrome:profiles', () => chrome.profiles())
+qh('bm:list', () => bm.all())
+qh('bm:remove', u => { bm.remove(u); sendTabs() })
+qh('bm:import', d => { const n = bm.add(chrome.bookmarks(d)); sendTabs(); return n })
+qh('ext:list', () => ext.list())
+qh('ext:toggle', id => ext.toggle(id))
+qh('ext:remove', id => ext.remove(id))
+qh('ext:import', d => ext.import(chrome.extensions(d)))
+qh('ext:load', async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Pick an unpacked extension folder' }); return r.canceled ? null : ext.add(r.filePaths[0]) })
+qh('ext:open', u => /^chrome-extension:\/\//.test(u) && newTab(u))
+qh('app:reset', async () => { // wipes everything qat ever saved, then starts fresh
+  const s = session.defaultSession, ud = app.getPath('userData')
+  for (const x of s.extensions.getAllExtensions()) s.extensions.removeExtension(x.id)
+  await s.clearStorageData()
+  await s.clearCache()
+  for (const f of ['settings.json', 'allow.json', 'history.json', 'bookmarks.json', 'extensions.json', 'adblock.bin', 'adblock-deep.bin', 'adblock-deep2.bin', 'extensions']) fs.rmSync(path.join(ud, f), { recursive: true, force: true })
+  app.relaunch()
+  app.exit(0)
+})
 ipcMain.handle('omni:search', (e, q) => fetch('https://suggestqueries.google.com/complete/search?client=chrome&q=' + encodeURIComponent(q), { signal: AbortSignal.timeout(1500) }).then(r => r.json()).then(j => j[1].slice(0, 5)).catch(() => []))
 ipcMain.on('nav:back', () => active().view.webContents.navigationHistory.goBack())
 ipcMain.on('nav:forward', () => active().view.webContents.navigationHistory.goForward())
@@ -227,7 +257,7 @@ ipcMain.on('side:toggle', () => {
 })
 ipcMain.on('mem:sleep-all', () => sleepTabs(true))
 ipcMain.on('menu', (e, a) => ({
-  new: () => newTab(), settings: () => newTab('qat://settings'), sleep: () => sleepTabs(true), dev: () => active().view?.webContents.toggleDevTools(),
+  new: () => newTab(), settings: () => newTab('qat://settings'), bookmarks: () => newTab('qat://bookmarks'), extensions: () => newTab('qat://extensions'), sleep: () => sleepTabs(true), dev: () => active().view?.webContents.toggleDevTools(),
   zin: () => zoom(1), zout: () => zoom(-1), full: () => win.setFullScreen(!win.isFullScreen()),
 })[a]?.())
 ipcMain.on('win:min', () => win.minimize())
@@ -247,6 +277,7 @@ function qatFile(req) {
 app.whenReady().then(async () => {
   await components.whenReady().catch(e => console.warn('widevine: ' + e.message)) // castlabs build fetches the cdm on first run so drm video plays
   protocol.handle('qat', req => { const f = qatFile(req); return f ? net.fetch(pathToFileURL(f).toString()) : new Response('Not found', { status: 404 }) })
+  await ext.start()
   block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   createWindow()
   setInterval(() => sleepTabs(false), 60000)

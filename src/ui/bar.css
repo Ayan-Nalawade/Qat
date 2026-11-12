@@ -39,6 +39,12 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 #shield.off .ok { display: none; }
 #shield.off { opacity: .5; }
 #shield.na { display: none; }
+#star { color: var(--dim); }
+#star svg { width: 16px; height: 16px; }
+#star:hover { color: var(--fg); }
+#star.on { color: #f5b301; }
+#star.on svg { fill: currentColor; }
+#star.na { display: none; }
 .pop { position: absolute; top: 46px; padding: 6px; border-radius: 18px; background: rgba(26,28,36,.97); color: #f2f4f8; box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.1); -webkit-app-region: no-drag; }
 .pop[data-tone="light"] { background: rgba(250,251,253,.97); color: #14161c; box-shadow: 0 10px 30px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.08); }
 .sg { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; border-radius: 12px; white-space: nowrap; overflow: hidden; }

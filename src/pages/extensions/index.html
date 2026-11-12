@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' qat:; img-src 'self' qat: data: https:; style-src 'self' qat: 'unsafe-inline'">
+<title>Extensions</title>
+<link rel="icon" href="qat://settings/shared/icon.png">
+<link rel="stylesheet" href="qat://settings/shared/style.css">
+<link rel="stylesheet" href="qat://settings/settings.css">
+</head>
+<body>
+<nav>
+  <div class="brand"><img src="qat://settings/shared/icon.png" alt=""><span>Extensions</span></div>
+  <a href="qat://settings">Settings</a>
+  <a href="qat://bookmarks">Bookmarks</a>
+  <a href="qat://extensions" class="on">Extensions</a>
+</nav>
+<main>
+  <h2>Extensions</h2>
+  <div class="bar">
+    <button type="button" class="pill" id="load">Load unpacked</button>
+    <select id="prof" class="ctl"></select>
+    <button type="button" class="pill" id="imp">Import from Chrome</button>
+  </div>
+  <small class="note" id="note"></small>
+  <div class="box" id="list"></div>
+  <p class="note">Extensions run on Electron's extension support, which covers content scripts, storage and most of the tabs API. Some extensions that need Chrome only features won't work fully.</p>
+</main>
+<script src="extensions.js"></script>
+</body>
+</html>
