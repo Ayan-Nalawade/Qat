@@ -1,4 +1,4 @@
-.item { padding: 10px 18px; gap: 14px; }
+.item { gap: 12px; }
 .item .fav, .item .glo { width: 16px; height: 16px; flex: none; }
 .glo { color: var(--dim); fill: none; stroke: currentColor; stroke-width: 1.6; }
 .item time { flex: none; color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }

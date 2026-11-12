@@ -57,8 +57,4 @@ const scam = $('#scam')
 qat.scam.get().then(v => scam.checked = v)
 scam.onchange = async () => { scam.checked = await qat.scam.set(scam.checked) }
 $('#reset-btn').onclick = () => confirm('Reset Qat? Everything you saved in Qat gets deleted and it restarts.') && qat.reset()
-$('#ver').textContent = 'Chromium ' + (navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '') + ', ad blocking by Ghostery, Widevine by castLabs'
-const links = [...document.querySelectorAll('nav a[href^="#"]')]
-const mark = () => { const y = scrollY + 80; let cur = links[0]; for (const a of links) if (document.querySelector(a.hash).offsetTop <= y) cur = a; links.forEach(a => a.classList.toggle('on', a === cur)) }
-addEventListener('scroll', mark, { passive: true })
-mark()
+$('#ver').textContent = 'Chromium ' + (navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '')

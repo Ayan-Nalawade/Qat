@@ -15,13 +15,13 @@ function draw() {
   let box, day
   for (const e of hits.slice(0, shown)) {
     const d = dayOf(e.at)
-    if (d !== day) { day = d; list.append(el('h3', '', d)); list.append(box = el('div', 'box')) }
+    if (d !== day) { day = d; list.append(box = el('div', 'box')); box.append(el('div', 'hd', d)) }
     const row = el('div', 'item'), a = el('a', 'txt'), x = el('button', 'pill', 'Remove'), bx = box
     if (e.icon) { const i = el('img', 'fav'); i.src = e.icon; i.onerror = () => i.replaceWith(globe()); row.append(i) } else row.append(globe())
     a.href = e.url
     a.title = e.url + (e.visits > 1 ? '\n' + e.visits + ' visits' : '')
     a.append(el('b', 'url', e.title || host(e.url)), el('small', 'url', host(e.url)))
-    x.onclick = async () => { await qat.hist.remove(e.url); all = all.filter(y => y !== e); row.remove(); if (!bx.children.length) draw() }
+    x.onclick = async () => { await qat.hist.remove(e.url); all = all.filter(y => y !== e); row.remove(); if (bx.children.length < 2) draw() }
     row.append(a, el('time', '', new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })), x)
     box.append(row)
   }

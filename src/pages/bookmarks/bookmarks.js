@@ -9,8 +9,8 @@ async function draw() {
   list.innerHTML = ''
   if (!groups.size) return list.append(Object.assign(el('div', 'box'), { innerHTML: '<div class="empty">' + (all.length ? 'Nothing matches' : 'No bookmarks yet. Press Ctrl+D or the star in the address bar to add one.') + '</div>' }))
   for (const [f, items] of groups) {
-    if (f) list.append(el('h3', '', f))
     const box = el('div', 'box')
+    if (f) box.append(el('div', 'hd', f))
     for (const b of items) {
       const row = el('div', 'item'), a = el('a', 'txt'), x = el('button', 'pill', 'Remove')
       a.href = b.url

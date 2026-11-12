@@ -10,56 +10,43 @@
 </head>
 <body>
 <nav>
-  <div class="brand"><img src="qat://settings/shared/icon.png" alt=""><span>Settings</span></div>
-  <a href="#privacy">Privacy and security</a>
-  <a href="#ai">AI</a>
-  <a href="#reset">Reset</a>
-  <a href="#about">About Qat</a>
-  <hr>
-  <a href="qat://history">History</a>
+  <div class="brand"><img src="qat://settings/shared/icon.png" alt=""><span>Qat</span></div>
+  <a href="qat://settings" class="on">Settings</a>
+  <a href="qat://history">History<kbd>Ctrl+H</kbd></a>
   <a href="qat://bookmarks">Bookmarks</a>
   <a href="qat://extensions">Extensions</a>
 </nav>
 <main>
-  <section id="privacy">
-    <h2>Privacy and security</h2>
-    <div class="box">
-      <label class="item">
-        <span class="txt"><b>Deep scan</b><small>Blocks ads that come from the site itself, plus cookie banners and tracker hosts the normal lists miss. Uses about 20 MB more memory. Open tabs pick it up after a reload.</small><small class="note" id="deep-note"></small></span>
-        <input id="deep" class="sw" type="checkbox">
-      </label>
-      <label class="item">
-        <span class="txt"><b>Scam check</b><small>Once a page loads, Qat sends its address, title and some of its text to your AI provider and puts a red ! on the site icon if it looks like a scam or phishing. Big well known sites are skipped and each site is checked once every few days. Needs an AI key below.</small></span>
-        <input id="scam" class="sw" type="checkbox">
-      </label>
+  <h2>Settings</h2>
+  <div class="box">
+    <div class="hd">Browsing</div>
+    <label class="item">
+      <span class="txt"><b>Deep scan</b><small>Bigger block lists for ads the normal ones miss. About 20 MB more RAM.</small><small class="note" id="deep-note"></small></span>
+      <input id="deep" class="sw" type="checkbox">
+    </label>
+    <label class="item">
+      <span class="txt"><b>Scam check</b><small>Your AI looks at sites Qat doesn't know and flags scams. Needs an AI key.</small></span>
+      <input id="scam" class="sw" type="checkbox">
+    </label>
+  </div>
+  <div class="box">
+    <div class="hd">AI</div>
+    <label class="item">
+      <span class="txt"><b>Provider</b></span>
+      <select id="active" class="ctl"></select>
+    </label>
+    <div id="cards"></div>
+  </div>
+  <div class="box">
+    <div class="hd">Qat</div>
+    <div class="item">
+      <span class="txt"><b>Version</b><small id="ver"></small></span>
     </div>
-  </section>
-  <section id="ai">
-    <h2>AI</h2>
-    <div class="box">
-      <label class="item">
-        <span class="txt"><b>Active provider</b><small>The chat sidebar talks to this one</small></span>
-        <select id="active" class="ctl"></select>
-      </label>
+    <div class="item">
+      <span class="txt"><b>Reset Qat</b><small>Wipes everything and restarts.</small></span>
+      <button type="button" class="pill danger" id="reset-btn">Reset</button>
     </div>
-    <h3>Providers</h3>
-    <div class="box" id="cards"></div>
-  </section>
-  <section id="reset">
-    <h2>Reset</h2>
-    <div class="box">
-      <div class="item">
-        <span class="txt"><b>Reset Qat</b><small>Deletes bookmarks, history, extensions, cookies, site logins, AI keys and every setting, then restarts Qat like it's the first run. This can't be undone.</small></span>
-        <button type="button" class="pill danger" id="reset-btn">Reset</button>
-      </div>
-    </div>
-  </section>
-  <section id="about">
-    <h2>About Qat</h2>
-    <div class="box">
-      <div class="item"><img class="logo" src="qat://settings/shared/icon.png" alt=""><span class="txt"><b>Qat</b><small id="ver"></small></span></div>
-    </div>
-  </section>
+  </div>
 </main>
 <script src="qat://settings/shared/picker.js"></script>
 <script src="settings.js"></script>
