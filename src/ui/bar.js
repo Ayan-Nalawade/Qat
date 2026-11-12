@@ -10,8 +10,9 @@ function render() {
   tabsEl.innerHTML = ''
   for (const t of state.tabs) {
     const el = document.createElement('div')
-    el.className = 'tab lg' + (t.id === state.activeId ? ' active' : '') + (t.sleeping ? ' sleeping' : '')
+    el.className = 'tab' + (t.id === state.activeId ? ' lg active' : '') + (t.sleeping ? ' sleeping' : '')
     el.title = t.title
+    if (t.id === state.activeId && document.body.dataset.tone) el.dataset.tone = document.body.dataset.tone // new node, keep the tone until the next frame
     el.innerHTML = (t.loading ? '<i class="spin"></i>' : t.favicon ? '<img class="fav" alt="">' : '<i class="dot"></i>') + '<span class="title"></span><button class="x" title="Close tab">' + X + '</button>'
     el.querySelector('.title').textContent = t.title
     const img = el.querySelector('img')
@@ -251,26 +252,26 @@ if (gl) {
 void main() { vec2 v = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(v * 2. - 1., 0, 1); }`))
   gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
-uniform vec2 u_res; uniform float u_dpr; uniform int u_n; uniform vec4 u_rect[${MAX}]; uniform float u_emph[${MAX}]; uniform float u_tone[${MAX}]; uniform float u_lum[${MAX}]; uniform sampler2D u_tex;
+uniform vec2 u_res; uniform float u_dpr; uniform int u_n; uniform vec4 u_rect[${MAX}]; uniform float u_emph[${MAX}]; uniform float u_rad[${MAX}]; uniform float u_tone[${MAX}]; uniform float u_lum[${MAX}]; uniform sampler2D u_tex;
 out vec4 o;
-float sdf(vec2 p, vec4 r) { vec2 b = r.zw * .5; float rad = min(b.x, b.y); vec2 q = abs(p - r.xy - b) - (b - rad); return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - rad; }
+float sdf(vec2 p, vec4 r, float rad) { vec2 b = r.zw * .5; rad = min(rad, min(b.x, b.y)); vec2 q = abs(p - r.xy - b) - (b - rad); return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - rad; }
 vec3 tx(vec2 p) { return texture(u_tex, clamp(vec2(p.x, u_res.y - p.y) / u_res, 0., 1.)).bgr; } // page top mirrored up into the bar, like apple's background extension
 vec3 blur(vec2 p, float r) { return textureLod(u_tex, clamp(vec2(p.x, u_res.y - p.y) / u_res, 0., 1.), log2(r) - 1.).bgr; } // mip levels = smooth cheap blur, texture is half res
 void main() {
   vec2 p = vec2(gl_FragCoord.x, u_res.y * u_dpr - gl_FragCoord.y) / u_dpr;
   float best = 1e5; int k = -1;
-  for (int i = 0; i < ${MAX}; i++) { if (i >= u_n) break; float s = sdf(p, u_rect[i]); if (s < best) { best = s; k = i; } }
+  for (int i = 0; i < ${MAX}; i++) { if (i >= u_n) break; float s = sdf(p, u_rect[i], u_rad[i]); if (s < best) { best = s; k = i; } }
   vec3 bg = blur(p, 11.);
   bg = mix(bg, blur(p, 24.), .6);
   bg = mix(bg, blur(p, 48.), .5);
   bg = mix(vec3(dot(bg, vec3(.299, .587, .114))), bg, .35); // muted, page colours shouldn't bleed into the bar
   if (k < 0) { o = vec4(bg, 1); return; }
-  vec4 r = u_rect[k]; float e = u_emph[k], tn = u_tone[k], f = smoothstep(.45, .9, u_lum[k]); // brighter backdrop = frostier, less shine
+  vec4 r = u_rect[k]; float R = u_rad[k], e = u_emph[k], tn = u_tone[k], f = smoothstep(.45, .9, u_lum[k]); // brighter backdrop = frostier, less shine
   bg *= 1. - pow(1. - clamp(best / 9., 0., 1.), 2.) * (.14 + .16 * tn) * step(0., best);
   if (best > .5) { o = vec4(bg, 1); return; }
   float cov = clamp(.5 - best, 0., 1.), d = max(-best, 0.);
   vec2 h = vec2(.5, 0.);
-  vec2 n = normalize(vec2(sdf(p + h.xy, r) - sdf(p - h.xy, r), sdf(p + h.yx, r) - sdf(p - h.yx, r)) + 1e-5);
+  vec2 n = normalize(vec2(sdf(p + h.xy, r, R) - sdf(p - h.xy, r, R), sdf(p + h.yx, r, R) - sdf(p - h.yx, r, R)) + 1e-5);
   vec2 off = n * (6. + 2. * e) * (1. - .6 * f) * pow(1. - clamp(d / 18., 0., 1.), 2.); // 2*6/18 < 1 keeps the mapping monotonic, no mirrored text
   vec3 c = vec3(0);
   for (int j = 0; j < 9; j++) { vec2 q = vec2(float(j % 3) - 1., float(j / 3) - 1.) * 2.4; c += vec3(tx(p - off + q).r, tx(p - off * 1.05 + q).g, tx(p - off * 1.1 + q).b); }
@@ -286,7 +287,7 @@ void main() {
 }`))
   gl.linkProgram(pr)
   gl.useProgram(pr)
-  for (const n of ['u_res', 'u_dpr', 'u_n', 'u_rect', 'u_emph', 'u_tone', 'u_lum', 'u_tex']) U[n] = gl.getUniformLocation(pr, n)
+  for (const n of ['u_res', 'u_dpr', 'u_n', 'u_rect', 'u_emph', 'u_rad', 'u_tone', 'u_lum', 'u_tex']) U[n] = gl.getUniformLocation(pr, n)
   tex = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, tex)
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v)
@@ -301,7 +302,7 @@ void main() {
 function collect() {
   items = [...document.querySelectorAll('.lg')].filter(el => el.offsetWidth).slice(0, MAX).map(el => {
     const r = el.getBoundingClientRect()
-    return { el, x: r.x, y: r.y, w: r.width, h: r.height, e: el.classList.contains('active') ? 1 : el.matches(':focus-within') ? .8 : el.matches(':hover') ? .6 : 0 }
+    return { el, x: r.x, y: r.y, w: r.width, h: r.height, rad: parseFloat(getComputedStyle(el).borderTopLeftRadius) || 10, e: el.classList.contains('active') ? 1 : el.matches(':focus-within') ? .8 : el.matches(':hover') ? .6 : 0 }
   })
   want()
 }
@@ -349,13 +350,14 @@ function draw() {
     gl.generateMipmap(gl.TEXTURE_2D)
   }
   tones()
-  const rects = new Float32Array(MAX * 4), emph = new Float32Array(MAX), tone = new Float32Array(MAX), lum = new Float32Array(MAX)
-  items.forEach((it, i) => { rects.set([it.x, it.y, it.w, it.h], i * 4); emph[i] = it.e; tone[i] = it.el.dataset.tone === 'light' ? 1 : 0; lum[i] = it.l || 0 })
+  const rects = new Float32Array(MAX * 4), emph = new Float32Array(MAX), rad = new Float32Array(MAX), tone = new Float32Array(MAX), lum = new Float32Array(MAX)
+  items.forEach((it, i) => { rects.set([it.x, it.y, it.w, it.h], i * 4); emph[i] = it.e; rad[i] = it.rad; tone[i] = it.el.dataset.tone === 'light' ? 1 : 0; lum[i] = it.l || 0 })
   gl.uniform2f(U.u_res, innerWidth, BH)
   gl.uniform1f(U.u_dpr, dpr)
   gl.uniform1i(U.u_n, items.length)
   gl.uniform4fv(U.u_rect, rects)
   gl.uniform1fv(U.u_emph, emph)
+  gl.uniform1fv(U.u_rad, rad)
   gl.uniform1fv(U.u_tone, tone)
   gl.uniform1fv(U.u_lum, lum)
   gl.clearColor(0, 0, 0, 0)

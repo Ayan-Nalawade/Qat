@@ -10,6 +10,7 @@ const I = {
   chev: '<svg class="chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>', cursor: '<svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg>',
   think: '<svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>',
 }
+const SICO = ['<path d="M5 7h14M5 12h14M5 17h9"/>', '<path d="M7 4h10v16l-5-3.5L7 20z"/>', '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>', '<path d="M4 20h4L19 9l-4-4L4 16z"/>']
 const SUGG = [['Summarise this page', 'Summarise this page in a few bullet points.'], ['What matters on this page?', 'What are the most important things on this page?'], ['Look something up', 'Search the web and find '], ['Help me fill in this form', 'Help me fill in the form on this page. Ask me for anything you need.']]
 
 function md(src) {
@@ -89,20 +90,20 @@ function bubble(m, last) {
 function empty() {
   const el = document.createElement('div'), p = cfg.providers[cfg.provider]
   el.className = 'empty'
-  el.innerHTML = '<img src="icon.png" alt=""><h3>' + (tab.title ? 'Ask about this page' : 'Ask Qat anything') + '</h3>'
+  el.innerHTML = '<div class="hd"><img src="icon.png" alt=""><h3>' + (tab.title ? 'Ask about this page' : 'Ask Qat anything') + '</h3></div>'
   if (!p.hasKey && cfg.provider !== 'custom') {
     el.insertAdjacentHTML('beforeend', '<p>Add an API key for ' + esc(p.name) + ' to start.</p><button class="pill">Open settings</button>')
     el.querySelector('button').onclick = openSettings
     return el
   }
-  el.insertAdjacentHTML('beforeend', '<p>' + (agent ? 'Or tell it what to do. It can click and type in this tab while you watch, and looks things up in the background without touching your tabs.' : 'Browser control is off. It can still search the web for you in the background.') + '</p><div class="sugg"></div>')
-  for (const [t, q] of SUGG) {
+  el.insertAdjacentHTML('beforeend', '<p>' + (agent ? 'Or tell it what to do. It can click and type in this tab while you watch, and looks things up in the background without touching your tabs.' : 'Browser control is off. It can still search the web for you in the background.') + '</p><div class="sugg lg"></div>')
+  SUGG.forEach(([t, q], i) => {
     const b = document.createElement('button')
-    b.className = 'lg'
-    b.textContent = t
+    b.innerHTML = '<svg viewBox="0 0 24 24">' + SICO[i] + '</svg><span></span><svg class="go" viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>'
+    b.querySelector('span').textContent = t
     b.onclick = () => { input.value = q; grow(); input.focus(); if (!q.endsWith(' ')) ask(q.trim()) }
     el.querySelector('.sugg').append(b)
-  }
+  })
   return el
 }
 
