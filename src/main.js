@@ -4,7 +4,7 @@ const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { pathToFileURL } = require('url')
-const block = require('./block'), hist = require('./history'), bm = require('./bookmarks'), ext = require('./extensions'), chrome = require('./chrome')
+const put = require('./put'), block = require('./block'), hist = require('./history'), bm = require('./bookmarks'), ext = require('./extensions'), chrome = require('./chrome')
 protocol.registerSchemesAsPrivileged([{ scheme: 'qat', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 app.commandLine.appendSwitch('process-per-site')
 app.commandLine.appendSwitch('renderer-process-limit', '6')
@@ -26,14 +26,15 @@ let win, bar, side, barH = STRIP, countTimer, activeId = null, nextId = 1, sideb
 
 const live = v => v && !v.webContents.isDestroyed()
 const send = (ch, ...a) => live(side) && side.webContents.send(ch, ...a)
-const ui = () => new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } })
+const ui = () => { const v = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } }); v.webContents.on('will-navigate', e => e.preventDefault()); v.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); return v } // these get window.qat, so they never leave their own page
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
 const toBar = (ch, ...a) => live(bar) && bar.webContents.send(ch, ...a)
 const sendTabs = () => (send('ai:tab', { title: active()?.title, url: active()?.url, favicon: active()?.favicon }), toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) }))
 const active = () => tabs.get(activeId)
 const tabOf = wc => [...tabs.values()].find(t => t.view?.webContents === wc)
 const SET = () => path.join(app.getPath('userData'), 'settings.json')
-const conf = (k, v) => { let s = {}; try { s = JSON.parse(fs.readFileSync(SET(), 'utf8')) } catch {} if (v === undefined) return s[k]; s[k] = v; fs.writeFileSync(SET(), JSON.stringify(s, null, 2)) }
+const conf = (k, v) => { let s = {}; try { s = JSON.parse(fs.readFileSync(SET(), 'utf8')) } catch {} if (v === undefined) return s[k]; s[k] = v; put(SET(), JSON.stringify(s, null, 2)) }
+const web = u => /^(https?|qat|chrome-extension):/i.test(u) // what pages and the assistant may open, no file: or javascript:
 
 // chrome's layout: loose bookmarks and "Bookmarks bar" folder on the bar, its subfolders as dropdowns, everything else under Other bookmarks
 function sendBm() {
@@ -53,7 +54,8 @@ const sendExts = () => toBar('exts', ext.list().filter(x => x.on).map(({ id, nam
 function toUrl(s) {
   s = s.trim()
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^(about|data|file|view-source):/i.test(s)) return s
-  if (/^localhost(:\d+)?([/?#]|$)/i.test(s) || (!/\s/.test(s) && s.includes('.'))) return 'https://' + s
+  if (/^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|\[::1\])(:\d+)?([/?#]|$)/i.test(s)) return 'http://' + s // dev servers and the router are plain http
+  if (!/\s/.test(s) && s.includes('.')) return 'https://' + s
   return 'https://www.google.com/search?q=' + encodeURIComponent(s)
 }
 
@@ -106,7 +108,7 @@ function attach(tab) {
   wc.on('page-favicon-updated', (e, f) => { tab.favicon = f[0]; sync(); bm.icon(wc.getURL(), f[0]) && sendBm() })
   for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page']) wc.on(ev, sync)
   keys(wc)
-  wc.setWindowOpenHandler(({ url }) => { newTab(url); return { action: 'deny' } })
+  wc.setWindowOpenHandler(({ url }) => { web(url) && newTab(url); return { action: 'deny' } })
   wc.on('input-event', (e, i) => tab === active() && heat(i.type === 'mouseMove' ? 100 : 700))
   wc.on('context-menu', (e, p) => menu(wc, p))
   wc.on('console-message', e => e.message === '__qat:stop' && ai.stop()) // the stop pill the agent overlay puts on the page
@@ -144,7 +146,7 @@ function sideSnap() {
 }
 
 function purge(tab) {
-  const d = tab !== active() && tab.view?.webContents.debugger
+  const d = tab !== active() && live(tab.view) && tab.view.webContents.debugger
   if (!d || d.isAttached()) return
   try { d.attach() } catch { return }
   d.sendCommand('Memory.simulatePressureNotification', { level: 'critical' }).catch(() => {}).finally(() => d.detach())
@@ -180,6 +182,7 @@ function newTab(url = HOME) {
 }
 
 function activate(id) {
+  if (!tabs.has(id)) return
   const prev = active()
   if (prev && prev !== tabs.get(id) && prev.view) { win.contentView.removeChildView(prev.view); prev.lastActive = Date.now(); setTimeout(() => purge(prev), 30000) }
   activeId = id
@@ -197,8 +200,9 @@ function activate(id) {
 
 function closeTab(id) {
   const tab = tabs.get(id)
+  if (!tab) return
   const ids = [...tabs.keys()], i = ids.indexOf(id)
-  if (tab.view) { win.contentView.removeChildView(tab.view); tab.view.webContents.close() }
+  if (tab.view) { block.reset(tab.view.webContents.id); win.contentView.removeChildView(tab.view); tab.view.webContents.close(); tab.view = null }
   tabs.delete(id)
   if (!tabs.size) return newTab()
   if (id === activeId) activate([...tabs.keys()][Math.min(i, tabs.size - 1)])
@@ -210,6 +214,7 @@ function sleep(tab) {
   tab.hist = { entries: h.getAllEntries(), index: h.getActiveIndex() } // waking up keeps back/forward and scroll
   tab.sleeping = true
   tab.loading = false
+  block.reset(tab.view.webContents.id)
   win.contentView.removeChildView(tab.view)
   tab.view.webContents.close()
   tab.view = null
@@ -266,7 +271,7 @@ ipcMain.on('star:toggle', star)
 const qh = (ch, f) => ipcMain.handle(ch, (e, ...a) => qatPage(e) ? f(...a) : undefined)
 qh('chrome:profiles', () => chrome.profiles())
 qh('bm:list', () => bm.all())
-qh('bm:remove', u => { bm.remove(u); sendTabs(); sendBm() })
+qh('bm:remove', (u, f) => { bm.remove(u, f); sendTabs(); sendBm() })
 qh('bm:import', d => { const n = bm.add(chrome.bookmarks(d)); sendTabs(); sendBm(); return n })
 qh('ext:list', () => ext.list())
 const then = f => async (...a) => { const r = await f(...a); sendExts(); return r }
@@ -323,13 +328,15 @@ ipcMain.on('ui:ready', () => { sendTabs(); sendBm(); sendExts() })
 const ai = require('./ai').setup(ipcMain, () => side?.webContents, {
   wc: () => active()?.view?.webContents,
   list: () => [...tabs.values()].map(t => ({ title: t.title, url: t.url, active: t.id === activeId })),
-  open: u => newTab(toUrl(u)),
+  open: u => { u = toUrl(u); if (!web(u)) throw new Error('Only web pages can be opened'); newTab(u) },
   switchTo: i => { const t = [...tabs.values()][i]; if (!t) throw new Error('No tab ' + i); activate(t.id) },
   close: i => { const t = [...tabs.values()][i]; if (!t) throw new Error('No tab ' + i); closeTab(t.id) },
 })
 
 function qatFile(req) {
-  const u = new URL(req.url), p = decodeURIComponent(u.pathname), ui = path.join(__dirname, 'ui'), pages = path.join(__dirname, 'pages')
+  let u, p
+  try { u = new URL(req.url); p = decodeURIComponent(u.pathname) } catch { return null }
+  const ui = path.join(__dirname, 'ui'), pages = path.join(__dirname, 'pages')
   const shared = p.startsWith('/shared/'), base = shared ? ui : pages
   const f = path.resolve(base, shared ? p.slice(8) : u.hostname + (p === '/' ? '/index.html' : p))
   return f.startsWith(base + path.sep) && fs.existsSync(f) && fs.statSync(f).isFile() ? f : null
@@ -351,3 +358,4 @@ app.whenReady().then(async () => {
   timers = [setInterval(() => sleepTabs(false), 60000), setInterval(meter, 5000), setInterval(snap, 500), setInterval(sideSnap, 1500)]
 })
 app.on('window-all-closed', () => app.quit())
+app.on('will-quit', hist.flush)
