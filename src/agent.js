@@ -40,38 +40,104 @@ const LOOK = `(() => {
 
 // glass frame round the page with a sheen running along it, a glass bead for the cursor and a pill saying what it's doing
 const OVERLAY = `(() => {
-  if (window.__qatO?.c.isConnected) return
+  if (window.__qatO?.host.isConnected) return
   const host = document.createElement('div'), root = host.attachShadow({ mode: 'closed' })
   host.id = '__qat'
   host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647'
   const css = document.createElement('style')
   css.textContent = \`
-.r{position:fixed;inset:0;padding:9px;overflow:hidden;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;backdrop-filter:blur(6px) saturate(2.2) brightness(1.1) contrast(.92);background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,255,255,.04) 40%,rgba(255,255,255,.12));box-shadow:inset 0 0 0 1px rgba(255,255,255,.55),inset 0 0 0 1.5px rgba(0,0,0,.1),inset 0 0 14px rgba(0,0,0,.16);animation:in .5s ease-out}
-.r i{position:absolute;left:50%;top:50%;width:300vmax;height:300vmax;margin:-150vmax 0 0 -150vmax;background:conic-gradient(transparent 0 66%,rgba(255,255,255,.85) 82%,transparent 96%);mix-blend-mode:plus-lighter;animation:spin 3.4s linear infinite}
-.c{position:fixed;left:50%;top:50%;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;backdrop-filter:blur(1.5px) saturate(1.8) brightness(1.25);box-shadow:inset 0 1.5px 1px rgba(255,255,255,.9),inset 0 -2px 5px rgba(0,0,0,.3),0 3px 10px rgba(0,0,0,.35),0 0 0 1px rgba(0,0,0,.28);opacity:0;transition:left .45s cubic-bezier(.3,.7,.2,1),top .45s cubic-bezier(.3,.7,.2,1),transform .14s,opacity .2s}
-.c.tap{transform:scale(.7)}
-.c.tap::after{content:'';position:absolute;inset:-2px;border-radius:50%;box-shadow:0 0 0 1.5px rgba(255,255,255,.85);animation:ring .5s ease-out forwards}
-.p{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:38px;padding:0 5px 0 16px;border-radius:19px;background:rgba(18,20,24,.4);backdrop-filter:blur(18px) saturate(1.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),inset 0 0 0 .5px rgba(255,255,255,.2),0 8px 26px rgba(0,0,0,.3);color:#fff;font:500 12.5px "Segoe UI Variable","Segoe UI",system-ui,sans-serif;text-shadow:0 1px 2px rgba(0,0,0,.45);pointer-events:auto;max-width:70vw;animation:up .35s cubic-bezier(.3,.7,.2,1)}
-.p span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.p button{height:28px;padding:0 13px;border:0;border-radius:14px;background:rgba(255,255,255,.18);color:#fff;font:inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.28)}
-.p button:hover{background:rgba(255,255,255,.3)}
-@keyframes spin{to{transform:rotate(1turn)}}@keyframes in{from{opacity:0}}@keyframes up{from{opacity:0;transform:translate(-50%,12px)}}@keyframes ring{to{inset:-16px;opacity:0}}
+*{box-sizing:border-box}
+.r{position:fixed;inset:0;padding:5px;overflow:hidden;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;backdrop-filter:blur(8px) saturate(1.8) brightness(1.08);background:linear-gradient(160deg,rgba(255,255,255,.32),rgba(255,255,255,.06) 30%,rgba(255,255,255,.02) 62%,rgba(255,255,255,.2));box-shadow:inset 0 0 0 1px rgba(255,255,255,.65),inset 0 0 0 1.5px rgba(0,0,0,.12);animation:fade .6s ease-out}
+.r i{position:absolute;left:50%;top:50%;width:300vmax;height:300vmax;margin:-150vmax 0 0 -150vmax;background:conic-gradient(transparent 0 38%,rgba(255,255,255,.95) 50%,transparent 62% 88%,rgba(255,255,255,.45) 94%,transparent);mix-blend-mode:plus-lighter;animation:spin 7s linear infinite}
+.v{position:fixed;inset:0;box-shadow:inset 0 0 80px rgba(255,255,255,.16),inset 0 0 26px rgba(0,0,0,.14);animation:fade .6s ease-out,breathe 3.4s ease-in-out infinite}
+.s{position:fixed;left:0;right:0;top:0;height:28vh;background:linear-gradient(transparent,rgba(255,255,255,.07) 70%,rgba(255,255,255,.28) 99%,rgba(255,255,255,.55));border-bottom:1px solid rgba(255,255,255,.45);mix-blend-mode:plus-lighter;opacity:0}
+.s.go{animation:scan 1.1s cubic-bezier(.5,0,.3,1)}
+.t{position:fixed;border-radius:10px;box-shadow:0 0 0 1px rgba(0,0,0,.3),0 0 0 3px rgba(255,255,255,.95),0 0 0 4px rgba(0,0,0,.14),0 8px 24px rgba(0,0,0,.2),0 0 32px rgba(255,255,255,.3);opacity:0;transition:all .38s cubic-bezier(.2,.8,.2,1)}
+.t.on{opacity:1}
+.c{position:fixed;left:0;top:0;offset-anchor:0 0;offset-rotate:0deg;opacity:0;transition:opacity .25s}
+.c svg{display:block;width:22px;height:22px;margin:-2px 0 0 -3px;filter:drop-shadow(0 2px 5px rgba(0,0,0,.35)) drop-shadow(0 0 1px rgba(0,0,0,.55));transform-origin:3px 2px;transition:transform .12s}
+.c.tap svg{transform:scale(.8)}
+.c .w{position:absolute;left:-15px;top:-15px;width:30px;height:30px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.95),0 0 12px rgba(255,255,255,.6);opacity:0}
+.c.tap .w{animation:ring .6s ease-out}
+.c b{position:absolute;left:15px;top:20px;padding:4px 9px;border-radius:4px 10px 10px 10px;background:rgba(22,24,29,.78);backdrop-filter:blur(14px) saturate(1.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 0 0 .5px rgba(255,255,255,.2),0 4px 14px rgba(0,0,0,.28);color:#fff;font:600 11px/1 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;white-space:nowrap}
+.p{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;height:48px;padding:0 7px 0 9px;border-radius:24px;background:rgba(22,24,29,.76);backdrop-filter:blur(24px) saturate(1.9);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 0 0 .5px rgba(255,255,255,.18),0 12px 36px rgba(0,0,0,.32),0 2px 6px rgba(0,0,0,.2);color:#fff;font:500 13px/1 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;pointer-events:auto;max-width:min(560px,82vw);animation:up .5s cubic-bezier(.2,.8,.2,1)}
+.o{position:relative;width:30px;height:30px;flex:none;border-radius:50%;background:radial-gradient(circle at 36% 30%,#fff 0,rgba(255,255,255,.6) 18%,rgba(255,255,255,.1) 58%),rgba(255,255,255,.06);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.45),0 0 16px rgba(255,255,255,.22);animation:breathe 2.4s ease-in-out infinite}
+.o::after{content:'';position:absolute;inset:-3px;border-radius:50%;background:conic-gradient(transparent 0 62%,rgba(255,255,255,.95) 92%,transparent);mask:radial-gradient(circle,transparent 15.5px,#000 16.5px);animation:spin 1.3s linear infinite}
+.x{display:flex;flex-direction:column;gap:3px;min-width:0}
+.x small{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums;white-space:nowrap}
+.x span{display:block;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.x span.in{animation:swap .4s cubic-bezier(.2,.8,.2,1)}
+.sep{width:1px;height:24px;flex:none;background:rgba(255,255,255,.15)}
+.p button{display:flex;align-items:center;gap:7px;height:34px;flex:none;padding:0 15px 0 13px;border:0;border-radius:17px;background:rgba(255,255,255,.14);color:#fff;font:600 12px/1 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;box-shadow:inset 0 1px 0 rgba(255,255,255,.2);cursor:pointer;transition:background .15s}
+.p button:hover{background:rgba(232,64,64,.9)}
+.p button i{width:9px;height:9px;border-radius:2px;background:currentColor}
+@keyframes spin{to{transform:rotate(1turn)}}
+@keyframes fade{from{opacity:0}}
+@keyframes breathe{50%{opacity:.6}}
+@keyframes up{from{opacity:0;transform:translate(-50%,16px) scale(.96)}}
+@keyframes swap{from{opacity:0;transform:translateY(7px)}}
+@keyframes ring{from{opacity:1;transform:scale(.35)}to{opacity:0;transform:scale(1.5)}}
+@keyframes scan{from{opacity:1;transform:translateY(-30vh)}85%{opacity:1}to{opacity:0;transform:translateY(100vh)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 \`
   const el = (tag, cls, parent = root) => parent.appendChild(Object.assign(document.createElement(tag), { className: cls })) // no innerHTML, trusted types sites like youtube reject it
   root.append(css)
+  el('div', 'v')
   el('i', '', el('div', 'r'))
-  el('div', 'c')
-  const pill = el('div', 'p')
-  el('span', '', pill).textContent = 'Qat is working'
-  el('button', '', pill).textContent = 'Stop'
-  root.querySelector('button').onclick = () => console.log('__qat:stop')
+  const scan = el('div', 's'), box = el('div', 't'), c = el('div', 'c'), ns = 'http://www.w3.org/2000/svg'
+  const svg = c.appendChild(document.createElementNS(ns, 'svg')), arrow = svg.appendChild(document.createElementNS(ns, 'path'))
+  svg.setAttribute('viewBox', '0 0 22 22')
+  for (const [k, v] of [['d', 'M3 2v16.6l4.6-4.3 3 6.8 2.9-1.2-3-6.7h6.4z'], ['fill', '#fff'], ['stroke', '#15171c'], ['stroke-width', '1.3'], ['stroke-linejoin', 'round']]) arrow.setAttribute(k, v)
+  el('i', 'w', c)
+  const tag = el('b', '', c)
+  const p = el('div', 'p')
+  el('div', 'o', p)
+  const x = el('div', 'x', p), meta = el('small', '', x), label = el('span', '', x)
+  el('i', 'sep', p)
+  const stop = el('button', '', p)
+  el('i', '', stop)
+  stop.append('Stop')
+  stop.onclick = () => console.log('__qat:stop')
+  label.textContent = 'Getting started'
   document.documentElement.append(host)
-  window.__qatO = { c: root.querySelector('.c'), s: root.querySelector('.p span'), p: root.querySelector('.p') }
+  const t0 = Date.now(), iv = setInterval(() => tick(), 1000)
+  let n = 0, at = null, pt
+  const tick = () => { if (!host.isConnected) return clearInterval(iv); const s = Math.floor((Date.now() - t0) / 1000); meta.textContent = 'Qat is browsing · step ' + Math.max(1, n) + ' · ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') }
+  tick()
+  window.__qatO = {
+    host,
+    say(t) { if (label.textContent !== t) { label.textContent = t; label.classList.remove('in'); void label.offsetWidth; label.classList.add('in') } },
+    step(t, look) {
+      n++
+      tick()
+      this.say(t)
+      box.classList.remove('on')
+      if (look) { scan.classList.remove('go'); void scan.offsetWidth; scan.classList.add('go') }
+    },
+    // curved glide like a hand on a mouse, returns how long it takes so the real click lands when the cursor does
+    move(tx, ty, r, verb, tap, say) {
+      if (say) this.say(say)
+      p.style.pointerEvents = 'none'
+      clearTimeout(pt)
+      pt = setTimeout(() => { p.style.pointerEvents = '' }, 1400)
+      tag.textContent = verb || 'Qat'
+      const [fx, fy] = at || [innerWidth / 2, innerHeight - 90], d = Math.hypot(tx - fx, ty - fy) || 1, ms = Math.round(Math.min(720, 240 + d * .55)), bend = Math.min(90, d * .2)
+      at = [tx, ty]
+      c.style.offsetPath = 'path("M' + fx + ' ' + fy + ' Q' + ((fx + tx) / 2 - (ty - fy) / d * bend) + ' ' + ((fy + ty) / 2 + (tx - fx) / d * bend) + ' ' + tx + ' ' + ty + '")'
+      c.style.opacity = 1
+      c.animate([{ offsetDistance: '0%' }, { offsetDistance: '100%' }], { duration: ms, easing: 'cubic-bezier(.45,.05,.2,1)', fill: 'forwards' })
+      box.classList.remove('on')
+      if (r) setTimeout(() => { Object.assign(box.style, { left: r[0] - 5 + 'px', top: r[1] - 5 + 'px', width: r[2] + 10 + 'px', height: r[3] + 10 + 'px', borderRadius: Math.min(14, r[3] / 2 + 5) + 'px' }); box.classList.add('on') }, ms * .55)
+      if (tap) setTimeout(() => { c.classList.remove('tap'); void c.offsetWidth; c.classList.add('tap'); setTimeout(() => c.classList.remove('tap'), 600) }, ms)
+      return ms
+    },
+  }
 })()`
 
 const keyCode = k => ({ arrowup: 'Up', arrowdown: 'Down', arrowleft: 'Left', arrowright: 'Right', esc: 'Escape', return: 'Enter', ' ': 'Space', space: 'Space', del: 'Delete', ctrl: 'Control', cmd: 'Meta' })[k.toLowerCase()] || (k.length === 1 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1))
 const MODS = { control: 'control', ctrl: 'control', shift: 'shift', alt: 'alt', meta: 'meta', cmd: 'meta' }
 
+const ING = { Click: 'Clicking', 'Double click': 'Double clicking', 'Right click': 'Right clicking', Choosing: 'Choosing in', Grab: 'Dragging', Drop: 'Dropping on' }
 const halt = m => Object.assign(new Error(m), { halt: true })
 
 function tools(b, signal) {
@@ -98,12 +164,16 @@ function tools(b, signal) {
   const where = () => { const w = b.wc(); return w ? ' Now on: ' + w.getTitle() + ' (' + w.getURL() + ')' : '' }
   const point = async (ref, x, y) => {
     if (ref == null) { if (x == null || y == null || !isFinite(x) || !isFinite(y)) throw new Error('Give a ref or both x and y'); return [+x, +y] }
-    const p = await js(`(() => { const el = document.querySelector('[data-qat="${+ref}"]'); if (!el) return null; el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] })()`)
+    const p = await js(`(() => { const el = document.querySelector('[data-qat="${+ref}"]'); if (!el) return null; el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2, r.x, r.y, r.width, r.height, (el.getAttribute('aria-label') || el.innerText || el.placeholder || el.value || el.title || '').trim().replace(/\\s+/g, ' ').slice(0, 40)] })()`)
     if (!p) throw new Error('ref ' + ref + ' is gone, call look again')
     return p
   }
-  // the pill stops taking clicks while the agent's own mouse is near, so it can't stop itself by accident
-  const show = async (x, y, tap) => { x = +x || 0; y = +y || 0; await js(OVERLAY + `;(o => { o.p.style.pointerEvents = 'none'; setTimeout(() => o.p.style.pointerEvents = '', 900); o.c.style.opacity = 1; o.c.style.left = '${x}px'; o.c.style.top = '${y}px'; ${tap ? "setTimeout(() => { o.c.classList.add('tap'); setTimeout(() => o.c.classList.remove('tap'), 500) }, 420)" : ''} })(window.__qatO)`).catch(() => {}); await wait(460) }
+  // glides the cursor over and boxes the target, the pill stops taking clicks meanwhile so the agent can't stop itself by accident
+  const show = async ([x, y, rx, ry, rw, rh, name], verb, tap) => {
+    const r = rx == null ? null : [rx, ry, rw, rh].map(Number), say = name && verb !== 'Typing' ? (ING[verb] || verb) + ' "' + name + '"' : ''
+    const ms = await js(OVERLAY + `;window.__qatO.move(${+x || 0}, ${+y || 0}, ${JSON.stringify(r)}, ${JSON.stringify(verb)}, ${!!tap}, ${JSON.stringify(say)})`).catch(() => 0)
+    await wait((ms || 0) + (tap ? 140 : 80))
+  }
   const mouse = (type, x, y, extra = {}) => wc().sendInputEvent({ type, x: Math.round(x * z()), y: Math.round(y * z()), ...extra })
   const press = (keys) => {
     const parts = keys.split('+').map(s => s.trim()).filter(Boolean), modifiers = parts.slice(0, -1).map(m => MODS[m.toLowerCase()]).filter(Boolean), k = keyCode(parts.at(-1) || '')
@@ -111,9 +181,10 @@ function tools(b, signal) {
     if (!modifiers.length && k.length === 1) wc().sendInputEvent({ type: 'char', keyCode: parts.at(-1), modifiers })
     wc().sendInputEvent({ type: 'keyUp', keyCode: k, modifiers })
   }
-  const click = async ({ ref, x, y, double, right }) => {
-    ;[x, y] = await point(ref, x, y)
-    await show(x, y, true)
+  const click = async ({ ref, x, y, double, right }, verb) => {
+    const at = await point(ref, x, y)
+    ;[x, y] = at
+    await show(at, verb || (double ? 'Double click' : right ? 'Right click' : 'Click'), true)
     const button = right ? 'right' : 'left'
     mouse('mouseMove', x, y)
     for (let i = 1; i <= (double ? 2 : 1); i++) { mouse('mouseDown', x, y, { button, clickCount: i }); mouse('mouseUp', x, y, { button, clickCount: i }) }
@@ -127,7 +198,7 @@ function tools(b, signal) {
     screenshot: async () => { let img = await wc().capturePage(); if (img.getSize().width > 1280) img = img.resize({ width: 1280 }); return { image: 'data:image/jpeg;base64,' + img.toJPEG(70).toString('base64'), text: 'Screenshot attached.' + where() } },
     click,
     type: async ({ text, ref, clear, enter }) => {
-      if (ref != null) await click({ ref })
+      if (ref != null) await click({ ref }, 'Typing')
       if (clear) { press('Control+A'); press('Backspace') }
       wc().insertText(text)
       if (enter) { press('Enter'); await settle() }
@@ -142,17 +213,18 @@ function tools(b, signal) {
       return 'Scrolled ' + direction + ', now at ' + r + 'px.'
     },
     drag: async ({ from_ref, to_ref, from_x, from_y, to_x, to_y }) => {
-      const [x1, y1] = await point(from_ref, from_x, from_y), [x2, y2] = await point(to_ref, to_x, to_y)
-      await show(x1, y1)
+      const a = await point(from_ref, from_x, from_y), z2 = await point(to_ref, to_x, to_y), [x1, y1] = a, [x2, y2] = z2
+      await show(a, 'Grab')
       mouse('mouseMove', x1, y1)
       mouse('mouseDown', x1, y1, { button: 'left', clickCount: 1 })
       for (let i = 1; i <= 12; i++) { const t = i / 12; mouse('mouseMove', x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, { modifiers: ['leftButtonDown'] }); await wait(25) }
-      await show(x2, y2)
+      await show(z2, 'Drop')
       mouse('mouseUp', x2, y2, { button: 'left', clickCount: 1 })
       await settle()
       return 'Dragged to ' + Math.round(x2) + ',' + Math.round(y2) + '.'
     },
     select: async ({ ref, option }) => {
+      await show(await point(ref), 'Choosing')
       const r = await js(`(() => { const el = document.querySelector('[data-qat="${+ref}"]'); if (!el || el.tagName !== 'SELECT') return 'ref ${+ref} is not a select, call look again'; const o = [...el.options].find(o => o.text.trim() === ${JSON.stringify(option)} || o.value === ${JSON.stringify(option)}) || [...el.options].find(o => o.text.toLowerCase().includes(${JSON.stringify(option.toLowerCase())})); if (!o) return 'No option like that. Options: ' + [...el.options].map(o => o.text.trim()).join(' | ').slice(0, 600); el.value = o.value; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return 'Selected ' + o.text.trim() })()`)
       await settle()
       return r
@@ -178,8 +250,8 @@ function tools(b, signal) {
       return b.list().map((t, i) => (t.active ? '* ' : '  ') + i + ': ' + t.title + ' (' + t.url + ')').join('\n')
     },
     wait: async ({ seconds }) => { await wait(Math.min(10, Math.max(0, seconds)) * 1000); return 'Waited.' + where() },
-    mark: label => wc().executeJavaScript(OVERLAY + `;window.__qatO.s.textContent = ${JSON.stringify(label)}`, true).catch(() => {}),
-    clear: () => cur && !cur.isDestroyed() && cur.executeJavaScript(`document.getElementById('__qat')?.remove(); document.querySelectorAll('[data-qat]').forEach(e => e.removeAttribute('data-qat'))`, true).catch(() => {}),
+    mark: (label, name) => wc().executeJavaScript(OVERLAY + `;window.__qatO.step(${JSON.stringify(label)}, ${name === 'look' || name === 'read'})`, true).catch(() => {}),
+    clear: () => cur && !cur.isDestroyed() && cur.executeJavaScript(`window.__qatO = null; document.querySelectorAll('#__qat').forEach(h => h.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300 }).finished.then(() => h.remove())); document.querySelectorAll('[data-qat]').forEach(e => e.removeAttribute('data-qat'))`, true).catch(() => {}),
   }
 }
 
@@ -284,7 +356,7 @@ async function run({ base, model, headers, history, agent, signal, out, browser 
           if (signal.aborted || stopped) throw new Error('Stopped')
           if (!c.a) throw new Error('The arguments were not valid JSON, send them again')
           if (!t[c.name] || c.name === 'clear' || c.name === 'mark') throw new Error('Unknown tool ' + c.name)
-          await t.mark(label)
+          await t.mark(label, c.name)
           res = await t[c.name](a)
           if (res?.image) { images ? pics.push(res.image) : 0; res = images ? res.text : "This model can't take images, use look instead." }
           out('ai:step', { id: c.id, state: 'ok' })
