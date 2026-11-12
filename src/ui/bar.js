@@ -230,7 +230,7 @@ function paintSite() {
     sitepop.append(row)
   } else if (r?.level === 'error') sitepop.append(srow(INFO, '', "Couldn't check this site", r.reason))
   if (r?.level === 'dangerous' || r?.level === 'suspicious') sitepop.append(srow(WARN, r.level === 'dangerous' ? 'bad' : 'sus', r.level === 'dangerous' ? 'Might be a scam' : 'Looks a bit off', r.reason))
-  if (d.scam && d.ai && ['safe', 'suspicious', 'dangerous', 'error'].includes(r?.level)) sitepop.append(srow(RELOAD, '', 'Check again', '', () => qat.site.rescan()))
+  if (d.scam && d.ai && ['safe', 'suspicious', 'dangerous', 'error'].includes(r?.level) && !r.trusted) sitepop.append(srow(RELOAD, '', 'Check again', '', () => qat.site.rescan()))
   if (d.cert) {
     const left = Math.ceil((d.cert.to - Date.now()) / 864e5)
     sitepop.append(srow(CERT, '', 'Certificate', (d.cert.issuerOrg || d.cert.issuer) + (left < 0 ? ', expired' : ', expires ' + day(d.cert.to)), () => qat.site.view(d.host)))
@@ -252,7 +252,7 @@ function paintSite() {
   if (/^https?:/.test(cur.url) && cur.sec !== 'local') {
     sitepop.append(mk('hr'))
     const off = d.url && (!d.scam || !d.ai)
-    sitepop.append(srow(GEAR, '', 'Scam check', off ? (d.scam ? 'Needs an AI key' : 'Off') : r?.level === 'safe' ? 'Looks fine' + (r.reason ? ': ' + r.reason : '') : r?.level === 'skip' ? 'Skipped on home feeds and search results' : '', () => { openPop(null); qat.site.settings('settings') }))
+    sitepop.append(srow(GEAR, '', 'Scam check', off ? (d.scam ? 'Needs an AI key' : 'Off') : r?.level === 'safe' ? 'Looks fine' + (r.reason ? ': ' + r.reason : '') : '', () => { openPop(null); qat.site.settings('settings') }))
   }
   fit()
 }
