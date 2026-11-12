@@ -15,6 +15,7 @@ const TOOLS = [
   ['tabs', 'List, open, switch to or close tabs.', { action: { type: 'string', enum: ['list', 'open', 'switch', 'close'] }, url: { type: 'string' }, index: { type: 'integer' } }, ['action']],
   ['wait', 'Wait for the page to finish something, up to 10 seconds.', { seconds: { type: 'number' } }, ['seconds']],
 ].map(([name, description, properties, required = []]) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required } } }))
+const NAMES = new Set(TOOLS.map(t => t.function.name))
 
 const LOOK = `(() => {
   document.querySelectorAll('[data-qat]').forEach(e => e.removeAttribute('data-qat'))
@@ -71,8 +72,21 @@ const OVERLAY = `(() => {
 const keyCode = k => ({ arrowup: 'Up', arrowdown: 'Down', arrowleft: 'Left', arrowright: 'Right', esc: 'Escape', return: 'Enter', ' ': 'Space', space: 'Space', del: 'Delete', ctrl: 'Control', cmd: 'Meta' })[k.toLowerCase()] || (k.length === 1 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1))
 const MODS = { control: 'control', ctrl: 'control', shift: 'shift', alt: 'alt', meta: 'meta', cmd: 'meta' }
 
-function tools(b) {
-  const wc = () => { const w = b.wc(); if (!w) throw new Error('No page is open in this tab'); return w }
+const halt = m => Object.assign(new Error(m), { halt: true })
+
+function tools(b, signal) {
+  // stays on the tab it started in, a tab switch by the user stops the run instead of clicking around in the wrong page
+  let cur = b.wc()
+  const wc = () => {
+    if (!cur || cur.isDestroyed()) throw halt('The tab I was working in got closed, so I stopped.')
+    if (cur !== b.wc()) throw halt('You switched tabs, so I stopped. Ask again from the tab you want me to use.')
+    return cur
+  }
+  const wait = ms => new Promise((ok, no) => { // stop has to land mid wait, not up to 10s later
+    if (signal.aborted) return no(new Error('Stopped'))
+    const t = setTimeout(() => { signal.removeEventListener('abort', stop); ok() }, ms), stop = () => { clearTimeout(t); no(new Error('Stopped')) }
+    signal.addEventListener('abort', stop, { once: true })
+  })
   const js = (code, w = wc()) => w.executeJavaScript(code, true)
   const z = () => wc().getZoomFactor()
   const settle = async () => {
@@ -83,13 +97,13 @@ function tools(b) {
   }
   const where = () => { const w = b.wc(); return w ? ' Now on: ' + w.getTitle() + ' (' + w.getURL() + ')' : '' }
   const point = async (ref, x, y) => {
-    if (ref == null) { if (x == null || y == null) throw new Error('Give a ref or both x and y'); return [x, y] }
+    if (ref == null) { if (x == null || y == null || !isFinite(x) || !isFinite(y)) throw new Error('Give a ref or both x and y'); return [+x, +y] }
     const p = await js(`(() => { const el = document.querySelector('[data-qat="${+ref}"]'); if (!el) return null; el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] })()`)
     if (!p) throw new Error('ref ' + ref + ' is gone, call look again')
     return p
   }
   // the pill stops taking clicks while the agent's own mouse is near, so it can't stop itself by accident
-  const show = async (x, y, tap) => { await js(OVERLAY + `;(o => { o.p.style.pointerEvents = 'none'; setTimeout(() => o.p.style.pointerEvents = '', 900); o.c.style.opacity = 1; o.c.style.left = '${x}px'; o.c.style.top = '${y}px'; ${tap ? "setTimeout(() => { o.c.classList.add('tap'); setTimeout(() => o.c.classList.remove('tap'), 500) }, 420)" : ''} })(window.__qatO)`).catch(() => {}); await wait(460) }
+  const show = async (x, y, tap) => { x = +x || 0; y = +y || 0; await js(OVERLAY + `;(o => { o.p.style.pointerEvents = 'none'; setTimeout(() => o.p.style.pointerEvents = '', 900); o.c.style.opacity = 1; o.c.style.left = '${x}px'; o.c.style.top = '${y}px'; ${tap ? "setTimeout(() => { o.c.classList.add('tap'); setTimeout(() => o.c.classList.remove('tap'), 500) }, 420)" : ''} })(window.__qatO)`).catch(() => {}); await wait(460) }
   const mouse = (type, x, y, extra = {}) => wc().sendInputEvent({ type, x: Math.round(x * z()), y: Math.round(y * z()), ...extra })
   const press = (keys) => {
     const parts = keys.split('+').map(s => s.trim()).filter(Boolean), modifiers = parts.slice(0, -1).map(m => MODS[m.toLowerCase()]).filter(Boolean), k = keyCode(parts.at(-1) || '')
@@ -121,6 +135,7 @@ function tools(b) {
     },
     key: async ({ keys }) => { press(keys); await settle(); return 'Pressed ' + keys + '.' + where() },
     scroll: async ({ direction, amount = 1, ref }) => {
+      amount = Math.min(20, Math.abs(+amount) || 1)
       const dx = { left: -1, right: 1 }[direction] || 0, dy = { up: -1, down: 1 }[direction] || 0
       const r = await js(`(() => { const el = ${ref != null ? `document.querySelector('[data-qat="${+ref}"]')` : 'null'} || document.scrollingElement; const s = el === document.scrollingElement; el.scrollBy({ left: ${dx} * ${amount} * (s ? innerWidth : el.clientWidth) * .85, top: ${dy} * ${amount} * (s ? innerHeight : el.clientHeight) * .85, behavior: 'instant' }); return Math.round(el.scrollTop) + ' of ' + Math.round(el.scrollHeight - el.clientHeight) })()`)
       await wait(300)
@@ -147,20 +162,24 @@ function tools(b) {
       if (url === 'back') h.goBack()
       else if (url === 'forward') h.goForward()
       else if (url === 'reload') w.reload()
-      else w.loadURL(/^[a-z][\w+.-]*:/i.test(url) ? url : 'https://' + url).catch(() => {})
+      else {
+        const u = /^[a-z][\w+.-]*:\/\//i.test(url) ? url : 'https://' + url
+        if (!/^https?:/i.test(u)) throw new Error('I can only open http and https pages')
+        w.loadURL(u).catch(() => {})
+      }
       await wait(400)
       await settle()
       return 'Loaded.' + where()
     },
     tabs: async ({ action, url, index }) => {
-      if (action === 'open') { b.open(url || 'https://www.google.com'); await wait(400); await settle() }
-      else if (action === 'switch') b.switchTo(index)
-      else if (action === 'close') b.close(index)
+      if (action === 'open') { b.open(url || 'https://www.google.com'); cur = b.wc(); await wait(400); await settle() }
+      else if (action === 'switch') { b.switchTo(index); cur = b.wc() }
+      else if (action === 'close') { b.close(index); cur = b.wc() }
       return b.list().map((t, i) => (t.active ? '* ' : '  ') + i + ': ' + t.title + ' (' + t.url + ')').join('\n')
     },
     wait: async ({ seconds }) => { await wait(Math.min(10, Math.max(0, seconds)) * 1000); return 'Waited.' + where() },
-    mark: label => b.wc()?.executeJavaScript(OVERLAY + `;window.__qatO.s.textContent = ${JSON.stringify(label)}`, true).catch(() => {}),
-    clear: () => b.wc()?.executeJavaScript(`document.getElementById('__qat')?.remove(); document.querySelectorAll('[data-qat]').forEach(e => e.removeAttribute('data-qat'))`, true).catch(() => {}),
+    mark: label => wc().executeJavaScript(OVERLAY + `;window.__qatO.s.textContent = ${JSON.stringify(label)}`, true).catch(() => {}),
+    clear: () => cur && !cur.isDestroyed() && cur.executeJavaScript(`document.getElementById('__qat')?.remove(); document.querySelectorAll('[data-qat]').forEach(e => e.removeAttribute('data-qat'))`, true).catch(() => {}),
   }
 }
 
@@ -200,10 +219,10 @@ function prune(msgs) {
 }
 
 async function run({ base, model, headers, history, agent, signal, out, browser }) {
-  const t = tools(browser), msgs = [{ role: 'system', content: prompt(agent, browser) }, ...history]
-  let useTools = agent, images = true
+  const t = tools(browser, signal), msgs = [{ role: 'system', content: prompt(agent, browser) }, ...history]
+  let useTools = agent, images = true, step, stopped
   try {
-    for (let step = 0; step < 40; step++) {
+    for (step = 0; step < 40 && !stopped; step++) {
       prune(msgs)
       const body = { model, stream: true, messages: msgs.map(({ name, ...m }) => m), ...(useTools && { tools: TOOLS }) }
       const r = await fetch(base + '/chat/completions', { method: 'POST', headers, signal, body: JSON.stringify(body) })
@@ -213,12 +232,19 @@ async function run({ base, model, headers, history, agent, signal, out, browser 
         if (r.status === 400 && images && /image|vision|multimodal|content/i.test(err) && msgs.some(m => Array.isArray(m.content))) { images = false; for (const m of msgs) if (Array.isArray(m.content)) m.content = "[screenshot dropped, this model can't take images. Use look and read instead.]"; step--; continue }
         throw new Error(`HTTP ${r.status} ${err}`)
       }
-      let text = '', calls = [], buf = '', inThink = false
+      let text = '', calls = [], buf = '', inThink = false, hold = ''
       const say = s => { if (s) { text += s; out('ai:chunk', { text: s }) } }, think = s => s && out('ai:think', { text: s })
-      const split = s => { // some models put their reasoning inline in <think> tags
+      const split = s => { // some models put their reasoning inline in <think> tags, which can arrive split across chunks
+        s = hold + s
+        hold = ''
         while (s) {
           const tag = inThink ? '</think>' : '<think>', i = s.indexOf(tag)
-          if (i < 0) return (inThink ? think : say)(s)
+          if (i < 0) {
+            let k = Math.min(tag.length - 1, s.length)
+            while (k && !tag.startsWith(s.slice(-k))) k--
+            hold = s.slice(s.length - k)
+            return (inThink ? think : say)(s.slice(0, s.length - k))
+          }
           ;(inThink ? think : say)(s.slice(0, i))
           s = s.slice(i + tag.length)
           inThink = !inThink
@@ -233,38 +259,42 @@ async function run({ base, model, headers, history, agent, signal, out, browser 
         think(d?.reasoning_content || d?.reasoning || '')
         if (d?.content) split(d.content)
         for (const c of d?.tool_calls || []) {
-          const k = calls[c.index ?? calls.length - 1] ||= { id: '', name: '', args: '' }
+          const last = calls.at(-1), i = c.index ?? (c.id && last?.id && last.id !== c.id ? calls.length : Math.max(0, calls.length - 1)) // some servers leave out index
+          const k = calls[i] ||= { id: '', name: '', args: '' }
           if (c.id) k.id = c.id
-          if (c.function?.name) k.name += c.function.name
+          if (c.function?.name && !NAMES.has(k.name)) k.name += c.function.name
           if (c.function?.arguments) k.args += c.function.arguments
         }
       }
       for await (const chunk of r.body) { buf += dec.decode(chunk, { stream: true }); const lines = buf.split('\n'); buf = lines.pop(); lines.forEach(feed) }
       feed(buf)
+      if (hold) (inThink ? think : say)(hold)
       calls = calls.filter(Boolean)
       if (!calls.length) break
-      calls.forEach((c, i) => c.id ||= 'call_' + step + '_' + i)
-      msgs.push({ role: 'assistant', content: text || null, tool_calls: calls.map(c => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.args || '{}' } })) })
+      calls.forEach((c, i) => { c.id ||= 'call_' + step + '_' + i; try { c.a = JSON.parse(c.args || '{}') } catch { c.a = null } })
+      msgs.push({ role: 'assistant', content: text || null, tool_calls: calls.map(c => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.a ? c.args || '{}' : '{}' } })) })
       if (text) out('ai:break')
       const pics = []
       for (const c of calls) {
-        let a = {}, res
-        try { a = JSON.parse(c.args || '{}') } catch {}
+        const a = c.a || {}
+        let res
         const label = (LABEL[c.name] || (() => c.name))(a)
         out('ai:step', { id: c.id, label, state: 'run' })
         try {
-          if (signal.aborted) throw new Error('Stopped')
+          if (signal.aborted || stopped) throw new Error('Stopped')
+          if (!c.a) throw new Error('The arguments were not valid JSON, send them again')
           if (!t[c.name] || c.name === 'clear' || c.name === 'mark') throw new Error('Unknown tool ' + c.name)
           await t.mark(label)
           res = await t[c.name](a)
           if (res?.image) { images ? pics.push(res.image) : 0; res = images ? res.text : "This model can't take images, use look instead." }
           out('ai:step', { id: c.id, state: 'ok' })
-        } catch (e) { res = 'Error: ' + e.message; out('ai:step', { id: c.id, state: 'err', detail: e.message }) }
+        } catch (e) { res = 'Error: ' + e.message; out('ai:step', { id: c.id, state: 'err', detail: e.message }); if (e.halt && !stopped) { stopped = true; out('ai:note', { text: e.message }) } }
         msgs.push({ role: 'tool', tool_call_id: c.id, name: c.name, content: String(res) })
       }
       for (const p of pics) msgs.push({ role: 'user', content: [{ type: 'text', text: 'Screenshot of the current tab:' }, { type: 'image_url', image_url: { url: p } }] })
       if (signal.aborted) break
     }
+    if (step >= 40) out('ai:note', { text: 'I stopped after 40 steps. Say continue if you want me to keep going.' })
     out('ai:done')
   } catch (e) {
     signal.aborted ? out('ai:done') : out('ai:error', { message: e.message + (e.cause ? ': ' + e.cause.message : '') })

@@ -1,6 +1,7 @@
 const { app, safeStorage } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const put = require('./put')
 
 const { run } = require('./agent')
 const PROVIDERS = {
@@ -30,6 +31,7 @@ const headers = (id, c) => ({ 'Content-Type': 'application/json', ...(c.key && {
 
 function setup(ipcMain, ui, browser) {
   const runs = new Map()
+  let last = Promise.resolve() // a new chat waits for the stopped run to clean up its overlay, otherwise that wipes the new run's refs
   const ok = e => e.sender === ui() || !!e.senderFrame?.url.startsWith('qat://')
   const handle = (ch, f) => ipcMain.handle(ch, (e, ...a) => ok(e) ? f(e, ...a) : undefined)
   const on = (ch, f) => ipcMain.on(ch, (e, ...a) => ok(e) && f(e, ...a))
@@ -41,7 +43,7 @@ function setup(ipcMain, ui, browser) {
     const s = read()
     s.provider = provider
     s.providers = { ...s.providers, [provider]: { ...s.providers?.[provider], model } }
-    fs.writeFileSync(file(), JSON.stringify(s, null, 2))
+    put(file(), JSON.stringify(s, null, 2))
     return changed()
   })
 
@@ -50,7 +52,7 @@ function setup(ipcMain, ui, browser) {
     s.provider = provider
     s.providers ||= {}
     s.providers[id] = { base: base.trim().replace(/\/+$/, '') || d.base, model: model.trim() || d.model, ...(key === null ? {} : key ? lock(key) : { key: old.key, enc: old.enc }) }
-    fs.writeFileSync(file(), JSON.stringify(s, null, 2))
+    put(file(), JSON.stringify(s, null, 2))
     return changed()
   })
 
@@ -64,10 +66,14 @@ function setup(ipcMain, ui, browser) {
   })
 
   on('ai:chat', async (e, { rid, messages, agent }) => {
-    const id = pub().provider, c = conf(id), ac = new AbortController()
+    const id = pub().provider, c = conf(id), ac = new AbortController(), out = (ch, d) => e.sender.isDestroyed() || e.sender.send(ch, { rid, ...d }), prev = last
     runs.set(rid, ac)
-    await run({ base: c.base, model: c.model, headers: headers(id, c), history: messages, agent, signal: ac.signal, browser, out: (ch, d) => e.sender.isDestroyed() || e.sender.send(ch, { rid, ...d }) })
-    runs.delete(rid)
+    last = (async () => {
+      await prev
+      try { await run({ base: c.base, model: c.model, headers: headers(id, c), history: messages, agent, signal: ac.signal, browser, out }) }
+      catch (err) { out('ai:error', { message: err.message }) }
+      finally { runs.delete(rid) }
+    })()
   })
 
   on('ai:stop', (e, rid) => runs.get(rid)?.abort())

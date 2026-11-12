@@ -13,10 +13,10 @@ const SUGG = [['Summarise this page', 'Summarise this page in a few bullet point
 
 function md(src) {
   const stash = []
-  const keep = h => '\0' + (stash.push(h) - 1) + '\0'
+  const keep = h => '\0' + (stash.push(h) - 1) + '\0', inl = h => '\x01' + (stash.push(h) - 1) + '\x01'
   let s = esc(src).replace(/```[^\n`]*\n?([\s\S]*?)(```|$)/g, (m, c) => keep('<div class="code"><button class="copy">Copy</button><pre><code>' + c.replace(/\n$/, '') + '</code></pre></div>'))
-  s = s.replace(/`([^`\n]+)`/g, (m, c) => keep('<code>' + c + '</code>'))
-  const inline = t => t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*([^*\s][^*]*?)\*/g, '<i>$1</i>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="#" data-u="$2">$1</a>')
+  s = s.replace(/`([^`\n]+)`/g, (m, c) => inl('<code>' + c + '</code>')).replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, t, u) => inl('<a href="#" data-u="' + u + '">' + t + '</a>')) // links stashed before bold and italic so a * in a url stays put
+  const inline = t => t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*([^*\s][^*]*?)\*/g, '<i>$1</i>')
   let out = '', list = '', para = []
   const flush = () => { if (para.length) out += '<p>' + inline(para.join('<br>')) + '</p>'; para = [] }
   const close = () => { if (list) out += '</' + list + '>'; list = '' }
@@ -33,7 +33,8 @@ function md(src) {
     } else { close(); para.push(line) }
   }
   flush(); close()
-  return out.replace(/\0(\d+)\0/g, (m, i) => stash[i])
+  const un = h => h.replace(/[\0\x01](\d+)[\0\x01]/g, (m, i) => stash[i])
+  return un(un(out))
 }
 
 function steps(p, live) {
@@ -99,6 +100,7 @@ function empty() {
 }
 
 function draw() {
+  if (!cfg) return
   msgsEl.innerHTML = ''
   if (!msgs.length) msgsEl.append(empty())
   msgs.forEach((m, i) => msgsEl.append(bubble(m, i === msgs.length - 1)))
@@ -117,14 +119,16 @@ function setBusy(v) {
 
 function grow() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px' }
 
-const text = m => m.role === 'user' ? m.content : m.parts.filter(p => p.type === 'text').map(p => p.text).join('\n\n')
+const said = m => m.parts.filter(p => p.type === 'text').map(p => p.text).join('\n\n')
+// what the model gets back as history, a reply that only used the browser still says what it did
+const text = m => m.role === 'user' ? m.content : said(m) || m.parts.filter(p => p.type === 'steps').map(p => '(used the browser: ' + p.steps.map(s => s.label).join(', ') + ')').join('\n')
 
 function send() {
-  const t = input.value.trim(), m = t.match(/^\/(\w+)\s*([\s\S]*)$/)
+  const t = input.value.trim(), m = t.match(/^\/(\w+)(?:\s+([\s\S]*))?$/) // /etc/hosts style text isn't a command
   if (m) {
     const c = CMDS.find(c => c[0] === m[1].toLowerCase())
     input.value = ''; grow(); menu()
-    if (c) c[2](m[2].trim())
+    if (c && c[2]((m[2] || '').trim()) === false) { input.value = t; grow() }
     else { err = 'There is no /' + m[1] + ' command. Type / to see them all.'; draw() }
     return
   }
@@ -132,7 +136,8 @@ function send() {
 }
 
 function ask(t) {
-  if (!t || busy) return
+  if (!t) return
+  if (busy) { flash('Still replying, wait for it or use /stop'); return false }
   err = ''
   stick = true
   msgs.push({ role: 'user', content: t }, { role: 'assistant', parts: [] })
@@ -210,16 +215,17 @@ $('#chat-new').onclick = newChat
 
 function retry() {
   const i = msgs.findLastIndex(m => m.role === 'user')
-  if (i < 0 || busy) return
+  if (i < 0) return
+  if (busy) return ask(msgs[i].content)
   const t = msgs[i].content
   msgs = msgs.slice(0, i)
   ask(t)
 }
 
 function copyLast() {
-  const m = msgs.findLast(m => m.role === 'assistant' && text(m))
+  const m = msgs.findLast(m => m.role === 'assistant' && said(m))
   if (!m) return flash('Nothing to copy yet')
-  navigator.clipboard.writeText(text(m))
+  navigator.clipboard.writeText(said(m))
   flash('Copied the last answer')
 }
 
