@@ -8,7 +8,7 @@ const host = u => { try { return new URL(u).hostname.replace(/^www\./, '') } cat
 const conf = () => { try { return JSON.parse(fs.readFileSync(path.join(dir(), 'settings.json'), 'utf8')) } catch { return {} } }
 const DNS = 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt' // ~220k ad, tracker and telemetry hosts that easylist skips
 const counts = new Map()
-let allow = new Set(), onCount = () => {}, blocker, deepId
+let allow = new Set(), onCount = () => {}, blocker
 try { allow = new Set(JSON.parse(fs.readFileSync(path.join(dir(), 'allow.json'), 'utf8'))) } catch {}
 
 const pageOf = id => { const wc = id && webContents.fromId(id); return wc ? host(wc.getURL()) : '' }
@@ -29,8 +29,6 @@ async function load(deep) {
   blocker?.disableBlockingInSession(s)
   b.enableBlockingInSession(s)
   blocker = b
-  if (deep && !deepId) deepId = s.registerPreloadScript({ type: 'frame', filePath: path.join(__dirname, 'deep-preload.js') })
-  if (!deep && deepId) { s.unregisterPreloadScript(deepId); deepId = null }
 }
 
 module.exports = {

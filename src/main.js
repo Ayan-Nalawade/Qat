@@ -242,10 +242,6 @@ ipcMain.on('tab:activate', (e, id) => activate(id))
 ipcMain.on('nav:go', (e, text) => { active().typed = true; active().view.webContents.loadURL(toUrl(text)).catch(() => {}) })
 ipcMain.on('bar:height', (e, h) => { barH = Math.max(STRIP, Math.min(h, win.getContentBounds().height)); layout() })
 ipcMain.on('shield:toggle', () => { const t = active(); block.toggle(t.url); block.reset(t.view.webContents.id); t.view.webContents.reload(); sendTabs() })
-ipcMain.on('ad:skip', (e, x, y) => { // a real click for deep-preload, only from the one site it runs on and only its top frame
-  if (!/(^|\.)youtube\.com$/.test(new URL(e.senderFrame.url).hostname) || e.senderFrame.parent) return
-  for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) e.sender.sendInputEvent({ type, x, y, button: 'left', clickCount: 1 })
-})
 const qatPage = e => !!e.senderFrame?.url.startsWith('qat://')
 ipcMain.handle('block:get', e => qatPage(e) ? block.deep() : undefined)
 ipcMain.handle('block:set', (e, v) => qatPage(e) ? block.setDeep(v) : undefined)
