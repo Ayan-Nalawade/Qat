@@ -26,7 +26,7 @@ const LOOK = `(() => {
     const cs = getComputedStyle(el)
     if (cs.visibility === 'hidden' || +cs.opacity === 0) continue
     const cx = Math.min(W - 1, Math.max(0, r.x + r.width / 2)), cy = Math.min(H - 1, Math.max(0, r.y + r.height / 2)), top = document.elementFromPoint(cx, cy)
-    if (top && top !== el && !el.contains(top) && !top.contains(el) && !(el.labels && [...el.labels].some(l => l.contains(top)))) continue
+    if (top && top.id !== '__qat' && top !== el && !el.contains(top) && !top.contains(el) && !(el.labels && [...el.labels].some(l => l.contains(top)))) continue
     const tag = el.tagName.toLowerCase(), field = tag === 'input' || tag === 'textarea' || tag === 'select'
     const name = (el.getAttribute('aria-label') || el.labels?.[0]?.innerText || el.placeholder || (field ? '' : el.innerText) || el.title || el.alt || el.querySelector?.('img')?.alt || el.name || '').replace(/\\s+/g, ' ').trim().slice(0, 80)
     el.setAttribute('data-qat', out.length + 1)
@@ -37,15 +37,35 @@ const LOOK = `(() => {
   return 'url: ' + location.href + '\\ntitle: ' + document.title + '\\nviewport: ' + W + 'x' + H + ', scrolled ' + Math.round(scrollY) + ' of ' + Math.max(0, Math.round(document.documentElement.scrollHeight - H)) + 'px\\n\\nelements:\\n' + (out.join('\\n') || '(none visible)') + '\\n\\ntext (' + text.length + ' chars, use read for all of it):\\n' + text.slice(0, 2500)
 })()`
 
-// green glow round the page plus a cursor that glides to each click, so it's obvious what the agent is touching
+// glass frame round the page with a sheen running along it, a glass bead for the cursor and a pill saying what it's doing
 const OVERLAY = `(() => {
-  if (window.__qatC?.isConnected) return
+  if (window.__qatO?.c.isConnected) return
   const host = document.createElement('div'), root = host.attachShadow({ mode: 'closed' })
   host.id = '__qat'
   host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647'
-  root.innerHTML = '<style>.g{position:fixed;inset:0;box-shadow:inset 0 0 0 2px rgba(79,196,155,.85),inset 0 0 30px rgba(79,196,155,.4);animation:p 2s ease-in-out infinite}.c{position:fixed;left:50%;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:rgba(79,196,155,.3);border:2px solid #4fc49b;box-shadow:0 0 12px rgba(79,196,155,.7);opacity:0;transition:left .4s cubic-bezier(.3,.7,.2,1),top .4s cubic-bezier(.3,.7,.2,1),transform .12s,opacity .2s}@keyframes p{50%{opacity:.5}}</style><div class=g></div><div class=c></div>'
+  const css = document.createElement('style')
+  css.textContent = \`
+.r{position:fixed;inset:0;padding:9px;overflow:hidden;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;backdrop-filter:blur(6px) saturate(2.2) brightness(1.1) contrast(.92);background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,255,255,.04) 40%,rgba(255,255,255,.12));box-shadow:inset 0 0 0 1px rgba(255,255,255,.55),inset 0 0 0 1.5px rgba(0,0,0,.1),inset 0 0 14px rgba(0,0,0,.16);animation:in .5s ease-out}
+.r i{position:absolute;left:50%;top:50%;width:300vmax;height:300vmax;margin:-150vmax 0 0 -150vmax;background:conic-gradient(transparent 0 66%,rgba(255,255,255,.85) 82%,transparent 96%);mix-blend-mode:plus-lighter;animation:spin 3.4s linear infinite}
+.c{position:fixed;left:50%;top:50%;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;backdrop-filter:blur(1.5px) saturate(1.8) brightness(1.25);box-shadow:inset 0 1.5px 1px rgba(255,255,255,.9),inset 0 -2px 5px rgba(0,0,0,.3),0 3px 10px rgba(0,0,0,.35),0 0 0 1px rgba(0,0,0,.28);opacity:0;transition:left .45s cubic-bezier(.3,.7,.2,1),top .45s cubic-bezier(.3,.7,.2,1),transform .14s,opacity .2s}
+.c.tap{transform:scale(.7)}
+.c.tap::after{content:'';position:absolute;inset:-2px;border-radius:50%;box-shadow:0 0 0 1.5px rgba(255,255,255,.85);animation:ring .5s ease-out forwards}
+.p{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:38px;padding:0 5px 0 16px;border-radius:19px;background:rgba(18,20,24,.4);backdrop-filter:blur(18px) saturate(1.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),inset 0 0 0 .5px rgba(255,255,255,.2),0 8px 26px rgba(0,0,0,.3);color:#fff;font:500 12.5px "Segoe UI Variable","Segoe UI",system-ui,sans-serif;text-shadow:0 1px 2px rgba(0,0,0,.45);pointer-events:auto;max-width:70vw;animation:up .35s cubic-bezier(.3,.7,.2,1)}
+.p span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p button{height:28px;padding:0 13px;border:0;border-radius:14px;background:rgba(255,255,255,.18);color:#fff;font:inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,.28)}
+.p button:hover{background:rgba(255,255,255,.3)}
+@keyframes spin{to{transform:rotate(1turn)}}@keyframes in{from{opacity:0}}@keyframes up{from{opacity:0;transform:translate(-50%,12px)}}@keyframes ring{to{inset:-16px;opacity:0}}
+\`
+  const el = (tag, cls, parent = root) => parent.appendChild(Object.assign(document.createElement(tag), { className: cls })) // no innerHTML, trusted types sites like youtube reject it
+  root.append(css)
+  el('i', '', el('div', 'r'))
+  el('div', 'c')
+  const pill = el('div', 'p')
+  el('span', '', pill).textContent = 'Qat is working'
+  el('button', '', pill).textContent = 'Stop'
+  root.querySelector('button').onclick = () => console.log('__qat:stop')
   document.documentElement.append(host)
-  window.__qatC = root.querySelector('.c')
+  window.__qatO = { c: root.querySelector('.c'), s: root.querySelector('.p span'), p: root.querySelector('.p') }
 })()`
 
 const keyCode = k => ({ arrowup: 'Up', arrowdown: 'Down', arrowleft: 'Left', arrowright: 'Right', esc: 'Escape', return: 'Enter', ' ': 'Space', space: 'Space', del: 'Delete', ctrl: 'Control', cmd: 'Meta' })[k.toLowerCase()] || (k.length === 1 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1))
@@ -68,7 +88,8 @@ function tools(b) {
     if (!p) throw new Error('ref ' + ref + ' is gone, call look again')
     return p
   }
-  const show = async (x, y, tap) => { await js(OVERLAY + `;(c => { c.style.opacity = 1; c.style.left = '${x}px'; c.style.top = '${y}px'; ${tap ? "setTimeout(() => { c.style.transform = 'scale(.6)'; setTimeout(() => c.style.transform = '', 160) }, 380)" : ''} })(window.__qatC)`).catch(() => {}); await wait(420) }
+  // the pill stops taking clicks while the agent's own mouse is near, so it can't stop itself by accident
+  const show = async (x, y, tap) => { await js(OVERLAY + `;(o => { o.p.style.pointerEvents = 'none'; setTimeout(() => o.p.style.pointerEvents = '', 900); o.c.style.opacity = 1; o.c.style.left = '${x}px'; o.c.style.top = '${y}px'; ${tap ? "setTimeout(() => { o.c.classList.add('tap'); setTimeout(() => o.c.classList.remove('tap'), 500) }, 420)" : ''} })(window.__qatO)`).catch(() => {}); await wait(460) }
   const mouse = (type, x, y, extra = {}) => wc().sendInputEvent({ type, x: Math.round(x * z()), y: Math.round(y * z()), ...extra })
   const press = (keys) => {
     const parts = keys.split('+').map(s => s.trim()).filter(Boolean), modifiers = parts.slice(0, -1).map(m => MODS[m.toLowerCase()]).filter(Boolean), k = keyCode(parts.at(-1) || '')
@@ -138,7 +159,7 @@ function tools(b) {
       return b.list().map((t, i) => (t.active ? '* ' : '  ') + i + ': ' + t.title + ' (' + t.url + ')').join('\n')
     },
     wait: async ({ seconds }) => { await wait(Math.min(10, Math.max(0, seconds)) * 1000); return 'Waited.' + where() },
-    mark: () => b.wc()?.executeJavaScript(OVERLAY, true).catch(() => {}),
+    mark: label => b.wc()?.executeJavaScript(OVERLAY + `;window.__qatO.s.textContent = ${JSON.stringify(label)}`, true).catch(() => {}),
     clear: () => b.wc()?.executeJavaScript(`document.getElementById('__qat')?.remove(); document.querySelectorAll('[data-qat]').forEach(e => e.removeAttribute('data-qat'))`, true).catch(() => {}),
   }
 }
@@ -192,14 +213,25 @@ async function run({ base, model, headers, history, agent, signal, out, browser 
         if (r.status === 400 && images && /image|vision|multimodal|content/i.test(err) && msgs.some(m => Array.isArray(m.content))) { images = false; for (const m of msgs) if (Array.isArray(m.content)) m.content = "[screenshot dropped, this model can't take images. Use look and read instead.]"; step--; continue }
         throw new Error(`HTTP ${r.status} ${err}`)
       }
-      let text = '', calls = [], buf = ''
+      let text = '', calls = [], buf = '', inThink = false
+      const say = s => { if (s) { text += s; out('ai:chunk', { text: s }) } }, think = s => s && out('ai:think', { text: s })
+      const split = s => { // some models put their reasoning inline in <think> tags
+        while (s) {
+          const tag = inThink ? '</think>' : '<think>', i = s.indexOf(tag)
+          if (i < 0) return (inThink ? think : say)(s)
+          ;(inThink ? think : say)(s.slice(0, i))
+          s = s.slice(i + tag.length)
+          inThink = !inThink
+        }
+      }
       const dec = new TextDecoder()
       const feed = l => {
         l = l.trim()
         if (!l.startsWith('data:') || l === 'data: [DONE]') return
         let d
         try { d = JSON.parse(l.slice(5)).choices?.[0]?.delta } catch { return }
-        if (d?.content) { text += d.content; out('ai:chunk', { text: d.content }) }
+        think(d?.reasoning_content || d?.reasoning || '')
+        if (d?.content) split(d.content)
         for (const c of d?.tool_calls || []) {
           const k = calls[c.index ?? calls.length - 1] ||= { id: '', name: '', args: '' }
           if (c.id) k.id = c.id
@@ -218,11 +250,12 @@ async function run({ base, model, headers, history, agent, signal, out, browser 
       for (const c of calls) {
         let a = {}, res
         try { a = JSON.parse(c.args || '{}') } catch {}
-        out('ai:step', { id: c.id, label: (LABEL[c.name] || (() => c.name))(a), state: 'run' })
+        const label = (LABEL[c.name] || (() => c.name))(a)
+        out('ai:step', { id: c.id, label, state: 'run' })
         try {
           if (signal.aborted) throw new Error('Stopped')
           if (!t[c.name] || c.name === 'clear' || c.name === 'mark') throw new Error('Unknown tool ' + c.name)
-          await t.mark()
+          await t.mark(label)
           res = await t[c.name](a)
           if (res?.image) { images ? pics.push(res.image) : 0; res = images ? res.text : "This model can't take images, use look instead." }
           out('ai:step', { id: c.id, state: 'ok' })

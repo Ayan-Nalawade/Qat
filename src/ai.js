@@ -71,6 +71,7 @@ function setup(ipcMain, ui, browser) {
   })
 
   on('ai:stop', (e, rid) => runs.get(rid)?.abort())
+  return { stop: () => runs.forEach(a => a.abort()) }
 }
 
 module.exports = { setup }
