@@ -12,6 +12,7 @@ app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess
 app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2') // network runs inside the main process, one less process
 app.commandLine.appendSwitch('log-level', '3')
 app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|qat)\/\S+/gi, '') // youtube stalls ~25s before playing for browsers it doesn't recognise
+app.setAppUserModelId('qat.browser') // own taskbar group, otherwise windows shows electron.exe's icon
 process.removeAllListeners('warning')
 process.on('warning', w => /Failed to load URL/.test(w.message) || console.warn(w.name + ': ' + w.message))
 
@@ -164,7 +165,7 @@ function meter() {
 
 function createWindow() {
   win = new BaseWindow({
-    width: 1280, height: 820, minWidth: 720, minHeight: 480, frame: false, icon: path.join(__dirname, 'ui', 'icon.png'), backgroundColor: '#00000000',
+    width: 1280, height: 820, minWidth: 720, minHeight: 480, frame: false, icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'), backgroundColor: '#00000000',
     ...(process.platform === 'win32' && { backgroundMaterial: 'acrylic' }),
     ...(process.platform === 'darwin' && { vibrancy: 'under-window', visualEffectState: 'active' }),
   })
@@ -185,6 +186,10 @@ ipcMain.on('tab:activate', (e, id) => activate(id))
 ipcMain.on('nav:go', (e, text) => { active().typed = true; active().view.webContents.loadURL(toUrl(text)).catch(() => {}) })
 ipcMain.on('bar:height', (e, h) => { barH = Math.max(STRIP, Math.min(h, win.getContentBounds().height)); layout() })
 ipcMain.on('shield:toggle', () => { const t = active(); block.toggle(t.url); block.reset(t.view.webContents.id); t.view.webContents.reload(); sendTabs() })
+ipcMain.on('yt:skip', (e, x, y) => { // only from youtube's top frame, and only a click
+  if (!/(^|\.)youtube\.com$/.test(new URL(e.senderFrame.url).hostname) || e.senderFrame.parent) return
+  for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) e.sender.sendInputEvent({ type, x, y, button: 'left', clickCount: 1 })
+})
 const qatPage = e => !!e.senderFrame?.url.startsWith('qat://')
 ipcMain.handle('block:get', e => qatPage(e) ? block.deep() : undefined)
 ipcMain.handle('block:set', (e, v) => qatPage(e) ? block.setDeep(v) : undefined)
