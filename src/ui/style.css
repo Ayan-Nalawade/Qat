@@ -133,6 +133,11 @@ body[data-tone="light"] { --fg: #0f1115; --dim2: rgba(15,17,21,.6); --faint: rgb
 #chat-send .i-halt, #chat-send.streaming .i-send { display: none; }
 #chat-send.streaming .i-halt { display: block; fill: currentColor; stroke: none; }
 
+#slash { margin: 0 12px 8px; padding: 6px; border-radius: 18px; flex: none; max-height: 260px; overflow-y: auto; }
+#slash button { display: flex; align-items: baseline; gap: 10px; width: 100%; height: 34px; padding: 0 12px; border-radius: 12px; text-align: left; color: var(--fg); font-size: 12.5px; }
+#slash button.hi { background: var(--faint2); }
+#slash b { font-weight: 600; flex: none; }
+#slash small { color: var(--dim2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #chat-pick { flex: 1; min-height: 0; margin: 0 12px 10px; padding: 12px; border-radius: 18px; }
 #side .ctl { background: var(--faint); border: 0; color: var(--fg); border-radius: 12px; }
 #side .ctl option { background: #1b1c1f; color: #fff; }

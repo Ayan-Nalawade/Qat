@@ -92,7 +92,7 @@ function empty() {
     const b = document.createElement('button')
     b.className = 'lg'
     b.textContent = t
-    b.onclick = () => { input.value = q; grow(); input.focus(); if (!q.endsWith(' ')) send() }
+    b.onclick = () => { input.value = q; grow(); input.focus(); if (!q.endsWith(' ')) ask(q.trim()) }
     el.querySelector('.sugg').append(b)
   }
   return el
@@ -120,7 +120,18 @@ function grow() { input.style.height = 'auto'; input.style.height = Math.min(inp
 const text = m => m.role === 'user' ? m.content : m.parts.filter(p => p.type === 'text').map(p => p.text).join('\n\n')
 
 function send() {
-  const t = input.value.trim()
+  const t = input.value.trim(), m = t.match(/^\/(\w+)\s*([\s\S]*)$/)
+  if (m) {
+    const c = CMDS.find(c => c[0] === m[1].toLowerCase())
+    input.value = ''; grow(); menu()
+    if (c) c[2](m[2].trim())
+    else { err = 'There is no /' + m[1] + ' command. Type / to see them all.'; draw() }
+    return
+  }
+  ask(t)
+}
+
+function ask(t) {
   if (!t || busy) return
   err = ''
   stick = true
@@ -179,13 +190,83 @@ msgsEl.addEventListener('click', e => {
   if (a) { e.preventDefault(); qat.newTab(a.dataset.u) }
   if (c) { navigator.clipboard.writeText(c.nextElementSibling.textContent); c.textContent = 'Copied'; setTimeout(() => { c.textContent = 'Copy' }, 1200) }
 })
-input.addEventListener('input', grow)
-input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() } })
+input.addEventListener('input', () => { grow(); hush = false; menu() })
+input.addEventListener('keydown', e => {
+  if (e.isComposing) return
+  if (!slash.hidden) {
+    const go = { ArrowDown: 1, ArrowUp: -1 }[e.key]
+    if (go) { e.preventDefault(); hi = (hi + go + shown.length) % shown.length; return menu() }
+    if (e.key === 'Escape') { e.preventDefault(); hush = true; return menu() }
+    if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); return run(shown[hi], e.key === 'Tab') }
+  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+})
 sendBtn.onclick = () => busy ? qat.ai.stop(rid) : send()
 $('#stop').onclick = () => qat.ai.stop(rid)
 const paintAgent = () => { agentBtn.classList.toggle('on', agent); agentBtn.title = agent ? 'The assistant can click, type and browse in the current tab. Click to turn off' : 'Chat only. Click to let the assistant use the browser' }
 agentBtn.onclick = () => { agent = !agent; try { localStorage.agent = agent ? '1' : '0' } catch {}; paintAgent(); if (!msgs.length) draw() }
-$('#chat-new').onclick = () => { if (busy) qat.ai.stop(rid); rid++; setBusy(false); msgs = []; err = ''; closePick(); draw() }
+function newChat() { if (busy) qat.ai.stop(rid); rid++; setBusy(false); msgs = []; err = ''; closePick(); draw(); input.focus() }
+$('#chat-new').onclick = newChat
+
+function retry() {
+  const i = msgs.findLastIndex(m => m.role === 'user')
+  if (i < 0 || busy) return
+  const t = msgs[i].content
+  msgs = msgs.slice(0, i)
+  ask(t)
+}
+
+function copyLast() {
+  const m = msgs.findLast(m => m.role === 'assistant' && text(m))
+  if (!m) return flash('Nothing to copy yet')
+  navigator.clipboard.writeText(text(m))
+  flash('Copied the last answer')
+}
+
+const PH = input.placeholder
+let flashT
+function flash(t) { input.placeholder = t; clearTimeout(flashT); flashT = setTimeout(() => { input.placeholder = PH }, 1600) }
+
+// name, what it does, run(args), true if it wants an argument before running
+const CMDS = [
+  ['new', 'Start a new chat', newChat],
+  ['clear', 'Clear this chat', newChat],
+  ['retry', 'Ask your last message again', retry],
+  ['copy', 'Copy the last answer', copyLast],
+  ['stop', 'Stop the current reply', () => busy && qat.ai.stop(rid)],
+  ['browser', 'Turn browser control on or off', () => agentBtn.click()],
+  ['model', 'Choose a model', () => openPick()],
+  ['settings', 'Open AI settings', () => openSettings()],
+  ['summarise', 'Summarise this page', a => ask('Summarise this page in a few bullet points.' + (a ? ' ' + a : ''))],
+  ['explain', 'Explain this page simply', a => ask('Explain what this page is about in simple words.' + (a ? ' ' + a : ''))],
+  ['translate', 'Translate this page, like /translate French', a => ask('Translate the main content of this page into ' + (a || 'English') + '.'), true],
+  ['help', 'Show every command', () => { input.value = '/'; menu(); input.focus() }],
+  ['close', 'Close the assistant', () => qat.toggleSide()],
+]
+const slash = $('#slash')
+let hi = 0, shown = [], hush = false
+
+function menu() {
+  const m = input.value.match(/^\/(\w*)$/), was = shown
+  shown = m && !hush ? CMDS.filter(c => c[0].startsWith(m[1].toLowerCase())) : []
+  if (shown.length !== was.length || shown.some((c, i) => c !== was[i])) hi = 0
+  slash.hidden = !shown.length
+  slash.replaceChildren(...shown.map((c, i) => {
+    const b = document.createElement('button')
+    b.className = i === hi ? 'hi' : ''
+    b.append(Object.assign(document.createElement('b'), { textContent: '/' + c[0] }), Object.assign(document.createElement('small'), { textContent: c[1] }))
+    b.onmousedown = e => { e.preventDefault(); run(c) }
+    b.onmouseenter = () => { hi = i; slash.querySelector('.hi')?.classList.remove('hi'); b.classList.add('hi') }
+    return b
+  }))
+  slash.querySelector('.hi')?.scrollIntoView({ block: 'nearest' })
+}
+
+function run(c, fill) {
+  if (fill || c[3]) { input.value = '/' + c[0] + ' '; hush = true; menu(); return input.focus() }
+  input.value = ''; grow(); menu()
+  c[2]('')
+}
 paintAgent()
 
 const openSettings = () => qat.newTab('qat://settings#ai')
