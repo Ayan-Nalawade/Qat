@@ -16,6 +16,7 @@
   <a href="#reset">Reset</a>
   <a href="#about">About Qat</a>
   <hr>
+  <a href="qat://history">History</a>
   <a href="qat://bookmarks">Bookmarks</a>
   <a href="qat://extensions">Extensions</a>
 </nav>
@@ -26,6 +27,10 @@
       <label class="item">
         <span class="txt"><b>Deep scan</b><small>Blocks ads that come from the site itself, plus cookie banners and tracker hosts the normal lists miss. Uses about 20 MB more memory. Open tabs pick it up after a reload.</small><small class="note" id="deep-note"></small></span>
         <input id="deep" class="sw" type="checkbox">
+      </label>
+      <label class="item">
+        <span class="txt"><b>Scam check</b><small>Once a page loads, Qat sends its address, title and some of its text to your AI provider and puts a red ! on the site icon if it looks like a scam or phishing. Big well known sites are skipped and each site is checked once every few days. Needs an AI key below.</small></span>
+        <input id="scam" class="sw" type="checkbox">
       </label>
     </div>
   </section>

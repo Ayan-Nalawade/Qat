@@ -29,6 +29,10 @@ module.exports = {
     h.set(u, e); save()
   },
   title(u, t) { const e = h.get(u); if (e && t) { e.t = t; save() } },
+  icon(u, f) { const e = h.get(u); if (e && f && e.f !== f) { e.f = f; save() } },
+  list: () => [...h.values()].sort((a, b) => b.v - a.v).map(e => ({ url: e.u, title: e.t, icon: e.f || '', at: e.v, visits: e.n })),
+  remove(urls) { for (const u of [].concat(urls)) h.delete(u); save(); flush() },
+  clear() { h.clear(); save(); flush() },
 
   // inline completion like chrome: finish a host you've been to, or a full url once you type past the host
   match(q) {
