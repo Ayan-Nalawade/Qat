@@ -77,10 +77,10 @@ function setup(ipcMain, ui, browser) {
 
   on('ai:chat', async (e, { rid, messages, agent, quick }) => {
     const id = pub().provider, c = conf(id), ac = new AbortController(), out = (ch, d) => e.sender.isDestroyed() || e.sender.send(ch, { rid, ...d }), key = e.sender.id + ':' + rid, prev = quick ? null : last
-    runs.set(key, ac)
+    runs.set(key, Object.assign(ac, { quick }))
     const job = (async () => {
       await prev
-      try { await run({ base: c.base, model: c.model, headers: headers(id, c), history: messages, agent, quick, signal: ac.signal, browser, out }) }
+      try { await run({ base: c.base, model: c.model, headers: headers(id, c), history: messages, agent, quick, signal: ac.signal, browser: quick && browser.bind(e.sender) || browser, out }) }
       catch (err) { out('ai:error', { message: err.message }) }
       finally { runs.delete(key) }
     })()
@@ -88,7 +88,32 @@ function setup(ipcMain, ui, browser) {
   })
 
   on('ai:stop', (e, rid) => runs.get(e.sender.id + ':' + rid)?.abort())
-  return { stop: () => runs.forEach(a => a.abort()) }
+  return { stop: sideOnly => runs.forEach(a => (!sideOnly || !a.quick) && a.abort()) } // the page's stop pill is the sidebar's, quick asks have their own button
 }
 
-module.exports = { setup }
+// one shot, no streaming, for background jobs like the scam check
+const ready = () => { const id = pub().provider; return id === 'custom' || !!conf(id).key }
+// streams and hangs up as soon as the reply holds a full json object, and asks thinking models to keep it short
+const plain = new Set() // models that reject reasoning_effort
+async function ask(messages, on = () => {}) {
+  const id = pub().provider, c = conf(id), ac = new AbortController(), t = setTimeout(() => ac.abort(), 60000)
+  const go = low => fetch(c.base + '/chat/completions', { method: 'POST', headers: headers(id, c), signal: ac.signal, body: JSON.stringify({ model: c.model, messages, temperature: 0, max_tokens: 1500, stream: true, ...(low && { reasoning_effort: 'low' }) }) })
+  try {
+    let r = await go(!plain.has(c.model))
+    if (r.status === 400 && !plain.has(c.model)) { plain.add(c.model); r = await go(false) }
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    const dec = new TextDecoder()
+    let buf = '', out = ''
+    for await (const chunk of r.body) {
+      buf += dec.decode(chunk, { stream: true })
+      const lines = buf.split(/\r?\n/)
+      buf = lines.pop()
+      for (const l of lines) if (l.startsWith('data: {')) { const d = JSON.parse(l.slice(6)).choices?.[0]?.delta || {}, think = d.reasoning_content || d.reasoning; think && on({ think }); d.content && on({ text: d.content }); out += d.content || '' }
+      if (/\{[\s\S]*\}/.test(out)) { try { JSON.parse(out.match(/\{[\s\S]*\}/)[0]); break } catch {} }
+    }
+    return out
+  } finally { clearTimeout(t); ac.abort() }
+}
+
+ask.model = () => conf(pub().provider).model
+module.exports = { setup, ask, ready }

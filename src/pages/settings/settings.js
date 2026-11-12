@@ -53,6 +53,9 @@ deep.onchange = async () => {
   try { await qat.block.set(deep.checked); dn.textContent = deep.checked ? 'Deep scan is on.' : 'Deep scan is off.' } catch (e) { dn.textContent = msgOf(e); deep.checked = !deep.checked }
   deep.disabled = false
 }
+const scam = $('#scam')
+qat.scam.get().then(v => scam.checked = v)
+scam.onchange = async () => { scam.checked = await qat.scam.set(scam.checked) }
 $('#reset-btn').onclick = () => confirm('Reset Qat? Everything you saved in Qat gets deleted and it restarts.') && qat.reset()
 $('#ver').textContent = 'Chromium ' + (navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '') + ', ad blocking by Ghostery, Widevine by castLabs'
 const links = [...document.querySelectorAll('nav a[href^="#"]')]

@@ -1,13 +1,12 @@
 const $ = s => document.querySelector(s)
 const input = $('#q-in'), card = $('#card'), out = $('#ans-body'), meta = $('#meta'), modeBtn = $('#mode'), B = document.body
-let msgs = [], rid = 0, busy = false, text = '', last = 0, raf = 0, steps = 0, agent = true, t0 = 0, verb = '', away = false
+let msgs = [], rid = 0, busy = false, text = '', last = 0, raf = 0, steps = 0, agent = true, t0 = 0, verb = ''
 try { agent = localStorage.quickAgent !== '0' } catch {}
 
 // glass.js only re-reads slab positions on events, so nudge it every frame while things move
 const follow = ms => { const end = performance.now() + ms, f = () => { dispatchEvent(new Event('resize')); performance.now() < end && requestAnimationFrame(f) }; f() }
-const shut = () => { qat.quick.close(); B.classList.remove('in') }
-// the page's own takeover bar looks the same, so while it clicks around we step aside and let that one show
-const aside = v => { if (away !== v) { away = v; qat.quick.hide(v) } }
+let closing
+const shut = () => { if (closing) return; B.classList.remove('in'); follow(250); closing = setTimeout(() => { closing = null; qat.quick.close() }, 220) } // fade out first
 
 function line() {
   const s = Math.floor((Date.now() - t0) / 1000), tm = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')
@@ -36,8 +35,9 @@ function setBusy(v) {
   B.classList.toggle('busy', v)
   $('#go span').textContent = v ? 'Stop' : 'Ask'
   qat.quick.run(v)
-  if (!v) aside(false)
+  if (!v) { input.placeholder = 'Ask a follow up or tell Qat what to do'; qat.quick.focus(); input.focus() } // straight into the follow up, no clicking
   line()
+  follow(1100) // the glass ring thickens while it works
 }
 
 function ask(q) {
@@ -60,24 +60,28 @@ function ask(q) {
 qat.on('quick:open', t => {
   if (!busy && Date.now() - last > 5 * 60000) reset() // short memory, a question after a long break starts fresh
   input.placeholder = t.title ? 'Ask about ' + (t.title.length > 34 ? t.title.slice(0, 34) + '...' : t.title) + ' or tell Qat what to do' : 'Ask or tell Qat what to do'
+  clearTimeout(closing); closing = null
   B.classList.remove('in')
-  void B.offsetWidth
-  B.classList.add('in')
+  // the view was hidden, so wait until it's really drawing again or the animation runs while nobody can see it
+  const go = () => { if (!B.classList.contains('in')) { B.classList.add('in'); follow(1100) } }
+  requestAnimationFrame(() => requestAnimationFrame(go))
+  setTimeout(go, 150) // in case frames never come
   input.focus()
   input.select()
   follow(600)
 })
 
+qat.on('quick:shut', shut)
 const mine = d => d.rid === rid
 qat.on('ai:think', d => { if (mine(d) && !text) { verb = 'thinking'; line() } })
 qat.on('ai:step', d => {
   if (!mine(d) || d.state !== 'run') return
   steps++
   verb = d.web ? (/^Read/.test(d.label) ? 'reading' : 'searching') : 'browsing'
-  if (!d.web) aside(true)
+  input.placeholder = d.label // what it's doing right now, the page itself only shows the cursor
   line()
 })
-qat.on('ai:chunk', d => { if (!mine(d)) return; aside(false); verb = 'answering'; text += d.text; repaint() })
+qat.on('ai:chunk', d => { if (!mine(d)) return; verb = 'answering'; text += d.text; repaint() })
 qat.on('ai:note', d => { if (mine(d)) { text += '\n\n*' + d.text + '*'; repaint() } })
 qat.on('ai:done', d => { if (!mine(d)) return; text ||= 'Done.'; msgs.push({ role: 'assistant', content: text }); last = Date.now(); setBusy(false); paint() })
 qat.on('ai:error', d => {
@@ -98,5 +102,6 @@ $('#fresh').onclick = () => { reset(); input.focus() }
 $('#copy').onclick = () => { navigator.clipboard.writeText(text); $('#copy span').textContent = 'Copied'; setTimeout(() => { $('#copy span').textContent = 'Copy' }, 1200) }
 $('#move').onclick = () => qat.quick.move(msgs.map(m => m.role === 'user' ? { role: 'user', content: m.content, files: [] } : { role: 'assistant', parts: [{ type: 'text', text: m.content }] }))
 out.onclick = e => { const a = e.target.closest('a'); if (a) { e.preventDefault(); qat.newTab(a.dataset.u); shut() } }
+addEventListener('keydown', e => { if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && document.activeElement !== input && !getSelection().toString()) input.focus() }, true) // typing anywhere lands in the box
 addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); shut() } }) // an answer still coming keeps going and is there next time
 addEventListener('mousedown', e => { if (!e.target.closest('#q')) shut() }) // clicking the page around it closes it, like any popup

@@ -87,6 +87,7 @@ const OVERLAY = `(() => {
 @keyframes swap{from{opacity:0;transform:translateY(7px)}}
 @keyframes ring{from{opacity:1;transform:scale(.35)}to{opacity:0;transform:scale(1.5)}}
 @keyframes scan{from{opacity:1;transform:translateY(-30vh)}85%{opacity:1}to{opacity:0;transform:translateY(100vh)}}
+:host([data-q]) .r,:host([data-q]) .v,:host([data-q]) .p{display:none}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 \`
   const el = (tag, cls, parent = root) => parent.appendChild(Object.assign(document.createElement(tag), { className: cls })) // no innerHTML, trusted types sites like youtube reject it
@@ -149,7 +150,8 @@ const MODS = { control: 'control', ctrl: 'control', shift: 'shift', alt: 'alt', 
 const ING = { Click: 'Clicking', 'Double click': 'Double clicking', 'Right click': 'Right clicking', Choosing: 'Choosing in', Grab: 'Dragging', Drop: 'Dropping on' }
 const halt = m => Object.assign(new Error(m), { halt: true })
 
-function tools(b, signal) {
+function tools(b, signal, quick) {
+  const OV = quick ? OVERLAY + ';window.__qatO?.host.setAttribute("data-q", "")' : OVERLAY // quick ask draws its own frame and bar, the page only gets the cursor
   // stays on the tab it started in, a tab switch by the user stops the run instead of clicking around in the wrong page
   let cur = b.wc()
   const wc = () => {
@@ -180,7 +182,7 @@ function tools(b, signal) {
   // glides the cursor over and boxes the target, the pill stops taking clicks meanwhile so the agent can't stop itself by accident
   const show = async ([x, y, rx, ry, rw, rh, name], verb, tap) => {
     const r = rx == null ? null : [rx, ry, rw, rh].map(Number), say = name && verb !== 'Typing' ? (ING[verb] || verb) + ' "' + name + '"' : ''
-    const ms = await js(OVERLAY + `;window.__qatO.move(${+x || 0}, ${+y || 0}, ${JSON.stringify(r)}, ${JSON.stringify(verb)}, ${!!tap}, ${JSON.stringify(say)})`).catch(() => 0)
+    const ms = await js(OV + `;window.__qatO.move(${+x || 0}, ${+y || 0}, ${JSON.stringify(r)}, ${JSON.stringify(verb)}, ${!!tap}, ${JSON.stringify(say)})`).catch(() => 0)
     await wait((ms || 0) + (tap ? 140 : 80))
   }
   const mouse = (type, x, y, extra = {}) => wc().sendInputEvent({ type, x: Math.round(x * z()), y: Math.round(y * z()), ...extra })
@@ -204,7 +206,7 @@ function tools(b, signal) {
   return {
     search: ({ query }) => web.search(String(query), signal),
     fetch: ({ url, offset = 0 }) => web.read(String(url), Math.max(0, +offset || 0), signal),
-    look: async () => { await js(OVERLAY).catch(() => {}); return js(LOOK) },
+    look: async () => { await js(OV).catch(() => {}); return js(LOOK) },
     read: async ({ offset = 0 }) => { const t = await js(`document.body?.innerText || ''`); return t.length ? `chars ${offset}-${Math.min(t.length, offset + 30000)} of ${t.length}:\n` + t.slice(offset, offset + 30000) : 'The page has no text.' },
     screenshot: async () => { let img = await wc().capturePage(); if (img.getSize().width > 1280) img = img.resize({ width: 1280 }); return { image: 'data:image/jpeg;base64,' + img.toJPEG(70).toString('base64'), text: 'Screenshot attached.' + where() } },
     click,
@@ -261,7 +263,7 @@ function tools(b, signal) {
       return b.list().map((t, i) => (t.active ? '* ' : '  ') + i + ': ' + t.title + ' (' + t.url + ')').join('\n')
     },
     wait: async ({ seconds }) => { await wait(Math.min(10, Math.max(0, seconds)) * 1000); return 'Waited.' + where() },
-    mark: (label, name) => wc().executeJavaScript(OVERLAY + `;window.__qatO.step(${JSON.stringify(label)}, ${name === 'look' || name === 'read'})`, true).catch(() => {}),
+    mark: (label, name) => wc().executeJavaScript(OV + `;window.__qatO.step(${JSON.stringify(label)}, ${name === 'look' || name === 'read'})`, true).catch(() => {}),
     clear: () => cur && !cur.isDestroyed() && cur.executeJavaScript(`window.__qatO = null; document.querySelectorAll('#__qat').forEach(h => h.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300 }).finished.then(() => h.remove())); document.querySelectorAll('[data-qat]').forEach(e => e.removeAttribute('data-qat'))`, true).catch(() => {}),
   }
 }
@@ -308,7 +310,7 @@ function prune(msgs) {
 }
 
 async function run({ base, model, headers, history, agent, quick, signal, out, browser }) {
-  const t = tools(browser, signal), msgs = [{ role: 'system', content: prompt(agent, browser) + (quick ? `
+  const t = tools(browser, signal, quick), msgs = [{ role: 'system', content: prompt(agent, browser) + (quick ? `
 
 This came from the quick ask bar, not the chat panel. ${agent ? 'If it needs doing, do it in their tab, then' : 'To answer about their page, fetch its url. Then'} reply in a few short sentences or a short list.` : '') }, ...history]
   let useTools = true, images = true, step, stopped

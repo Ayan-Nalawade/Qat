@@ -49,6 +49,8 @@ body[data-tone="light"], .lg[data-tone="light"] { --fg: #0e1014; --dim: rgba(14,
 .tab:not(.lg) + .tab:not(.lg)::before { content: ""; position: absolute; left: -2px; width: 1px; height: 14px; background: var(--dim); opacity: .3; }
 .tab:hover::before, .tab:hover + .tab::before { opacity: 0 !important; }
 .tab.sleeping { opacity: .55; }
+.tab.ai::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 1px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #6ea8ff, #b48cff, #6ea8ff) 0 0 / 200% 100%; animation: aiflow 1.4s linear infinite; }
+@keyframes aiflow { to { background-position: -200% 0; } }
 .tab .fav { width: 16px; height: 16px; border-radius: 4px; flex: none; object-fit: contain; }
 .tab .dot { width: 8px; height: 8px; margin: 4px; border-radius: 50%; background: currentColor; opacity: .6; flex: none; }
 .tab .spin { width: 14px; height: 14px; margin: 1px; border-radius: 50%; border: 2px solid var(--dim); border-top-color: var(--fg); animation: spin .8s linear infinite; flex: none; }
@@ -62,7 +64,39 @@ body[data-tone="light"], .lg[data-tone="light"] { --fg: #0e1014; --dim: rgba(14,
 .sep { width: 1px; height: 16px; margin: 0 4px; background: var(--dim); opacity: .35; }
 #reload .i-stop, #reload.loading .i-reload { display: none; }
 #reload.loading .i-stop { display: block; }
-#omni { flex: 1; min-width: 0; height: 34px; border-radius: 10px; margin: 0 6px; padding: 0 2px 0 14px; overflow: hidden; }
+#omni { flex: 1; min-width: 0; height: 34px; border-radius: 10px; margin: 0 6px; padding: 0 2px 0 3px; overflow: hidden; }
+/* site info: certificate icon, says not secure out loud, red ! when the scam check thinks it's dangerous */
+#site { position: relative; width: auto !important; min-width: 30px; padding: 0 7px; margin-right: 6px; gap: 6px; display: flex; align-items: center; color: var(--dim); font-size: 12px; white-space: nowrap; }
+#site svg { width: 16px; height: 16px; }
+#site:hover, #site.on { color: var(--fg); background: var(--hov); }
+#site.warn { color: #ff6b6b; }
+#site-lbl:empty { display: none; }
+#site .dz, #site.danger svg:not(.dz) { display: none; }
+#site.danger .dz { display: block; color: #ff4d4f; }
+#site.chk #site-lbl { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+#site-warn { display: none; position: absolute; left: 17px; top: 15px; width: 12px; height: 12px; border-radius: 50%; background: #e5383b; color: #fff; font: 800 9px/12px "Segoe UI", system-ui, sans-serif; font-style: normal; text-align: center; text-shadow: none; box-shadow: 0 0 0 1.5px rgba(20,22,28,.85); }
+#site.risk #site-warn { display: block; }
+#sitepop { width: 320px; max-height: 620px; overflow: hidden auto; display: flex; flex-direction: column; }
+#sitepop[hidden] { display: none; }
+#sitepop::-webkit-scrollbar { width: 10px; }
+#sitepop::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 5px; background: rgba(127,140,170,.35) padding-box; }
+#sitepop .host { padding: 8px 12px 6px; font-weight: 600; overflow-wrap: anywhere; }
+#sitepop .srow, #sitepop summary { display: flex; align-items: flex-start; gap: 10px; padding: 7px 12px; border-radius: 7px; text-align: left; line-height: 18px; }
+#sitepop svg { width: 16px; height: 16px; flex: none; margin-top: 1px; opacity: .75; }
+#sitepop .srow span { display: flex; flex-direction: column; min-width: 0; }
+#sitepop small { font-size: 11.5px; opacity: .55; overflow-wrap: anywhere; }
+#sitepop button.srow:hover, #sitepop summary:hover { background: rgba(127,140,170,.2); }
+#sitepop .bad { color: #ff6b6b; }
+#sitepop .sus { color: #f0a020; }
+#sitepop .bad svg, #sitepop .sus svg { opacity: 1; }
+#sitepop .srow .spin { width: 12px; height: 12px; margin: 2px; border-radius: 50%; border: 2px solid rgba(127,140,170,.35); border-top-color: currentColor; animation: spin .8s linear infinite; flex: none; }
+#sitepop .peek { margin-top: 3px; font-style: italic; opacity: .45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#sitepop summary { cursor: default; list-style: none; }
+#sitepop summary::-webkit-details-marker { display: none; }
+#sitepop .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; padding: 4px 12px 8px 38px; font-size: 11.5px; }
+#sitepop .kv span:nth-child(odd) { opacity: .55; white-space: nowrap; }
+#sitepop .kv span:nth-child(even) { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 #omni .ib { width: 30px; height: 28px; border-radius: 7px; }
 #shield { width: auto !important; min-width: 30px; padding: 0 7px; gap: 3px; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 #shield svg { width: 16px; height: 16px; }

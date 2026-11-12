@@ -5,22 +5,33 @@ let BH = 88
 let state = { tabs: [], activeId: null }
 const X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'
 
+function tabEl(t) {
+  const el = document.createElement('div')
+  el.className = 'tab' + (t.id === state.activeId ? ' lg active' : '') + (t.sleeping ? ' sleeping' : '') + (t.ai ? ' ai' : '')
+  el.title = t.ai ? t.title + ' (Qat is working in this tab)' : t.title
+  if (t.id === state.activeId && document.body.dataset.tone) el.dataset.tone = document.body.dataset.tone // new node, keep the tone until the next frame
+  el.innerHTML = (t.loading ? '<i class="spin"></i>' : t.favicon ? '<img class="fav" alt="">' : '<i class="dot"></i>') + '<span class="title"></span><button class="x" title="Close tab">' + X + '</button>'
+  el.querySelector('.title').textContent = t.title
+  const img = el.querySelector('img')
+  if (img) { img.src = t.favicon; img.onerror = () => img.replaceWith(Object.assign(document.createElement('i'), { className: 'dot' })) }
+  el.onmousedown = e => { if (e.button === 1) { e.preventDefault(); qat.closeTab(t.id) } else if (e.button === 0 && !e.target.closest('.x')) qat.activateTab(t.id) }
+  el.querySelector('.x').onclick = () => qat.closeTab(t.id)
+  return el
+}
+
+const tabEls = new Map()
+let lastState = ''
 function render() {
   const cur = state.tabs.find(t => t.id === state.activeId)
-  tabsEl.innerHTML = ''
-  for (const t of state.tabs) {
-    const el = document.createElement('div')
-    el.className = 'tab' + (t.id === state.activeId ? ' lg active' : '') + (t.sleeping ? ' sleeping' : '')
-    el.title = t.title
-    if (t.id === state.activeId && document.body.dataset.tone) el.dataset.tone = document.body.dataset.tone // new node, keep the tone until the next frame
-    el.innerHTML = (t.loading ? '<i class="spin"></i>' : t.favicon ? '<img class="fav" alt="">' : '<i class="dot"></i>') + '<span class="title"></span><button class="x" title="Close tab">' + X + '</button>'
-    el.querySelector('.title').textContent = t.title
-    const img = el.querySelector('img')
-    if (img) { img.src = t.favicon; img.onerror = () => img.replaceWith(Object.assign(document.createElement('i'), { className: 'dot' })) }
-    el.onmousedown = e => { if (e.button === 1) { e.preventDefault(); qat.closeTab(t.id) } else if (e.button === 0 && !e.target.closest('.x')) qat.activateTab(t.id) }
-    el.querySelector('.x').onclick = () => qat.closeTab(t.id)
-    tabsEl.append(el)
-  }
+  // tabs only get rebuilt when they change, this fires a lot while pages load and a full rebuild restarted spinners and refetched favicons
+  let moved = false
+  state.tabs.forEach((t, i) => {
+    const sig = [t.title, t.loading, t.favicon, t.sleeping, t.ai, t.id === state.activeId].join('\n')
+    let el = tabEls.get(t.id)
+    if (el?.sig !== sig) { const n = tabEl(t); el?.replaceWith(n); el = n; el.sig = sig; tabEls.set(t.id, el); moved = true }
+    if (tabsEl.children[i] !== el) { tabsEl.insertBefore(el, tabsEl.children[i] || null); moved = true }
+  })
+  for (const [id, el] of tabEls) if (!state.tabs.some(t => t.id === id)) { el.remove(); tabEls.delete(id); moved = true }
   $('#back').disabled = !cur.canGoBack
   $('#forward').disabled = !cur.canGoForward
   $('#reload').classList.toggle('loading', cur.loading)
@@ -35,10 +46,18 @@ function render() {
   $('#star').title = cur.starred ? 'Remove bookmark' : 'Bookmark this tab (Ctrl+D)'
   $('#zoom-val').textContent = (cur.zoom || 100) + '%'
   $('#shield-n').textContent = cur.shield && cur.blocked ? (cur.blocked > 999 ? '999+' : cur.blocked) : ''
-  watchRects()
+  const site = $('#site'), open = cur.sec === 'http' || cur.sec === 'bad', lv = cur.risk?.level, bad = lv === 'dangerous'
+  site.classList.toggle('warn', open || bad)
+  site.classList.toggle('danger', bad) // a likely scam swaps the certificate for a warning sign
+  site.classList.toggle('risk', lv === 'suspicious')
+  site.classList.toggle('chk', lv === 'checking')
+  $('#site-lbl').textContent = lv === 'checking' ? 'Checking website...' : open ? 'Not secure' : ''
+  site.title = bad ? 'This site might be a scam. Click for details' : lv === 'suspicious' ? 'This site looks a bit off. Click for details' : 'View site information'
+  if (!sitepop.hidden) siteData?.url && siteData.url !== cur.url ? openPop(null) : paintSite()
+  if (moved) watchRects()
 }
 
-qat.on('tabs', s => { state = s; render() })
+qat.on('tabs', s => { const j = JSON.stringify(s); if (j === lastState) return; lastState = j; state = s; render() })
 qat.on('mem', mb => { $('#mem-val').textContent = mb + ' MB' })
 qat.on('side', open => $('#ai-toggle').classList.toggle('on', open))
 qat.on('focus-omnibox', () => { omni.focus(); omni.select() })
@@ -71,7 +90,7 @@ function show(list) {
 // the bar view grows while a popup is open so it can hang over the page
 const fit = () => qat.barHeight(Math.max(BH, ...[...document.querySelectorAll('.pop:not([hidden])')].map(p => Math.ceil(p.getBoundingClientRect().bottom) + 16)))
 
-const menu = $('#menu'), mbtn = $('#menu-btn'), extmenu = $('#extmenu'), fold = $('#bmfold'), pops = [menu, extmenu, fold]
+const menu = $('#menu'), mbtn = $('#menu-btn'), extmenu = $('#extmenu'), fold = $('#bmfold'), sitepop = $('#sitepop'), pops = [menu, extmenu, fold, sitepop]
 const mk = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls || '', textContent: txt || '' })
 let popBtn = null
 
@@ -191,6 +210,65 @@ qat.on('exts', l => {
 })
 $('#ext-more').onclick = () => { if (extmenu.hidden) fillExt(); openPop(extmenu, $('#ext-more')) }
 
+// site info popup, laid out like the main menu
+const ic = d => '<svg viewBox="0 0 24 24">' + d + '</svg>'
+const LOCK = ic('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>'), OPEN = ic('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 7.6-1.7"/>'), INFO = ic('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>')
+const CERT = ic('<rect x="3.5" y="4.5" width="17" height="12" rx="2"/><path d="M7.5 8.5h9M7.5 11.5h4"/><circle cx="16" cy="14" r="2.4"/>'), WARN = ic('<path d="M12 4 3 19.5h18z"/><path d="M12 10v4.5M12 17h.01"/>'), BARS = ic('<path d="M6 19v-6M12 19V6M18 19v-9"/>'), RELOAD = ic('<path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/>'), GEAR = ic('<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>')
+const SEC = { ok: [LOCK, '', 'Connection is secure'], http: [OPEN, 'bad', 'Not secure'], bad: [OPEN, 'bad', 'Certificate is not valid'], local: [INFO, '', 'Local site'], qat: [INFO, '', 'Qat page'], other: [INFO, '', 'Site info'] }
+let siteData = null
+const day = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+const kv = rows => { const g = mk('div', 'kv'); for (const [k, v] of rows) if (v != null && v !== '' && !Number.isNaN(v)) g.append(mk('span', '', k), mk('span', '', String(v))); return g }
+const srow = (svg, cls, text, sub, click) => { const r = mk(click ? 'button' : 'div', 'srow ' + cls); r.innerHTML = svg; const t = mk('span'); t.append(text); if (sub) t.append(mk('small', '', sub)); r.append(t); if (click) r.onclick = click; return r }
+
+function paintSite() {
+  const cur = state.tabs.find(t => t.id === state.activeId), d = siteData || {}, [svg, cls, title] = SEC[cur.sec] || SEC.other, open = sitepop.querySelector('.nerd')?.open, r = cur.risk
+  const sub = cur.sec === 'http' ? "Don't type passwords or card details here" : cur.sec === 'bad' ? d.certErr || cur.certErr : ''
+  sitepop.replaceChildren(mk('div', 'host', d.host || cur.url), srow(svg, cls, title, sub))
+  if (r?.level === 'checking') {
+    const row = srow('<i class="spin"></i>', '', 'Checking this site', r.stage + ' · ' + Math.max(0, Math.round((Date.now() - r.since) / 1000)) + 's')
+    if (r.peek) row.lastChild.append(mk('small', 'peek', r.peek))
+    sitepop.append(row)
+  } else if (r?.level === 'error') sitepop.append(srow(INFO, '', "Couldn't check this site", r.reason))
+  if (r?.level === 'dangerous' || r?.level === 'suspicious') sitepop.append(srow(WARN, r.level === 'dangerous' ? 'bad' : 'sus', r.level === 'dangerous' ? 'Might be a scam' : 'Looks a bit off', r.reason))
+  if (d.scam && d.ai && ['safe', 'suspicious', 'dangerous', 'error'].includes(r?.level)) sitepop.append(srow(RELOAD, '', 'Check again', '', () => qat.site.rescan()))
+  if (d.cert) {
+    const left = Math.ceil((d.cert.to - Date.now()) / 864e5)
+    sitepop.append(srow(CERT, '', 'Certificate', (d.cert.issuerOrg || d.cert.issuer) + (left < 0 ? ', expired' : ', expires ' + day(d.cert.to)), () => qat.site.view(d.host)))
+  } else if (d.err) sitepop.append(srow(CERT, '', 'Certificate', "Couldn't read it"))
+  if (d.url && (d.tls || d.page)) {
+    const n = mk('details', 'nerd'), t = d.tls || {}, c = d.cert || {}, p = d.page || {}, ms = v => v ? v + ' ms' : null, s = mk('summary')
+    s.innerHTML = BARS
+    s.append('Stats for nerds')
+    n.append(s, kv([
+      ['TLS', t.version], ['Cipher', t.cipher], ['Key exchange', t.group], ['Protocol', p.proto], ['Server IP', t.ip], ['Handshake', ms(t.ms)],
+      ['Cert key', c.key], ['Signature', c.sig], ['Names on cert', c.names], ['Valid from', c.from && day(c.from)], ['Chain', c.chain?.join(' < ')], ['Serial', c.serial], ['SHA-256', c.sha256],
+      ['DNS', ms(p.dns)], ['Connect', ms(p.connect)], ['TLS setup', ms(p.tls)], ['First byte', ms(p.ttfb)], ['DOM ready', ms(p.dom)], ['Loaded', ms(p.load)],
+      ['Requests', p.requests], ['Downloaded', p.kb ? p.kb + ' KB' : null], ['Cookies', d.cookies], ['Ads blocked', cur.blocked],
+    ]))
+    n.open = !!open
+    n.ontoggle = fit
+    sitepop.append(n)
+  }
+  if (/^https?:/.test(cur.url) && cur.sec !== 'local') {
+    sitepop.append(mk('hr'))
+    const off = d.url && (!d.scam || !d.ai)
+    sitepop.append(srow(GEAR, '', 'Scam check', off ? (d.scam ? 'Needs an AI key' : 'Off') : r?.level === 'safe' ? 'Looks fine' + (r.reason ? ': ' + r.reason : '') : r?.level === 'skip' ? 'Skipped on home feeds and search results' : '', () => { openPop(null); qat.site.settings('settings') }))
+  }
+  fit()
+}
+
+setInterval(() => !sitepop.hidden && state.tabs.find(t => t.id === state.activeId)?.risk?.level === 'checking' && paintSite(), 1000) // the seconds counter
+$('#site').onclick = async () => {
+  if (!sitepop.hidden) return openPop(null)
+  siteData = null
+  paintSite()
+  openPop(sitepop, $('#site'), true)
+  const d = await qat.site.info()
+  if (sitepop.hidden || !d) return
+  siteData = d
+  paintSite()
+}
+
 function build(v, m, g = []) {
   const list = [looksUrl(v) ? { kind: 'url', text: v, url: v } : { kind: 'search', text: v, title: v + ' - Google Search', url: gsearch(v) }], seen = new Set([bare(v)])
   for (const h of m.items) if (!seen.has(bare(h.url))) { seen.add(bare(h.url)); list.push({ kind: 'url', text: bare(h.url), title: h.title, url: h.url, star: h.star }) }
@@ -223,7 +301,7 @@ omni.addEventListener('keydown', e => {
 })
 omni.addEventListener('focus', () => omni.select())
 omni.addEventListener('blur', () => { seq++; clearTimeout(gt); show([]); state.activeId && render() })
-addEventListener('mousedown', e => { if (e.target === document.body || e.target === document.documentElement) omni.blur(); if (popBtn && !e.target.closest('.pop, #menu-btn, #ext-more, .bmf')) openPop(null) })
+addEventListener('mousedown', e => { if (e.target === document.body || e.target === document.documentElement) omni.blur(); if (popBtn && !e.target.closest('.pop, #menu-btn, #ext-more, .bmf, #site')) openPop(null) })
 $('#shield').onclick = qat.shield
 $('#star').onclick = qat.star
 $('#back').onclick = qat.back
