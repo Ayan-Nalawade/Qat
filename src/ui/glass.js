@@ -93,6 +93,7 @@ qat.on('glass:frame', f => {
   for (let i = 0; i < f.data.length; i += 4) s += .2126 * f.data[i + 2] + .7152 * f.data[i + 1] + .0722 * f.data[i]
   const l = s / (f.data.length / 4) / 255, t = document.body.dataset.tone
   goal = l > .58 ? 1 : l < .42 ? 0 : +(t === 'light')
+  if (document.body.dataset.lock) goal = +(document.body.dataset.lock === 'light') // quick ask's bar is always dark, like the takeover one
   document.body.dataset.tone = goal ? 'light' : 'dark'
   if (!gl) return
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, f.width, f.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, f.data)

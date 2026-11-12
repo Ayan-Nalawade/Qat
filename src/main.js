@@ -22,7 +22,7 @@ const HOME = 'https://www.google.com'
 const tabs = new Map()
 const SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
 let STRIP = 88, crx, timers = [] // STRIP grows by a row when the bookmarks bar is on
-let omniR = [160, 640], win, bar, side, quick, quickOpen = false, quickBusy = false, quickRun = false, quickH = 140, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
+let win, bar, side, quick, quickOpen = false, quickBusy = false, quickRun = false, quickAway = false, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
 const live = v => v && !v.webContents.isDestroyed()
 const send = (ch, ...a) => live(side) && side.webContents.send(ch, ...a)
@@ -146,7 +146,7 @@ function sideSnap() {
   wc.capturePage({ x, y: 0, width: pw - x, height: h }).then(img => { img = img.resize({ width: 40, quality: 'good' }); const { width, height } = img.getSize(); send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { sideBusy = false })
 }
 
-// ctrl+space: an ask box hanging off the toolbar, the view is only as big as the box so the page stays usable
+// ctrl+space: the takeover look from agent.js, with an ask box in its bar, over the whole page
 function toggleQuick(open = !quickOpen) {
   if (open && !active()?.view) return
   quickOpen = open
@@ -159,7 +159,7 @@ function toggleQuick(open = !quickOpen) {
   }
   if (open && !quick.webContents.isLoading()) showQuick()
   layout()
-  if (!open) active()?.view?.webContents.focus()
+  if (!open) { quickAway = false; active()?.view?.webContents.focus() }
 }
 function showQuick() {
   win.contentView.addChildView(quick)
@@ -172,12 +172,10 @@ function quickSnap() {
   const wc = active()?.view?.webContents
   if (!quickOpen || !live(quick) || quickBusy || !wc || win.isMinimized()) return
   quickBusy = true
-  const b = quick.getBounds()
-  wc.capturePage({ x: b.x, y: 0, width: b.width, height: b.height }).then(img => { img = img.resize({ width: Math.round(b.width / 8), quality: 'good' }); const { width, height } = img.getSize(); live(quick) && quick.webContents.send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { quickBusy = false })
+  wc.capturePage().then(img => { img = img.resize({ width: Math.round(pw / 10), quality: 'good' }); const { width, height } = img.getSize(); live(quick) && quick.webContents.send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { quickBusy = false })
 }
-ipcMain.on('bar:omni', (e, x, w) => { if (e.sender === bar?.webContents) { omniR = [x, w]; quickOpen && layout() } })
 ipcMain.on('quick:close', e => e.sender === quick?.webContents && toggleQuick(false))
-ipcMain.on('quick:size', (e, h) => { if (e.sender !== quick?.webContents) return; quickH = Math.max(60, Math.round(h)); layout(); quickSnap() })
+ipcMain.on('quick:hide', (e, v) => { if (e.sender === quick?.webContents) { quickAway = !!v; layout(); quickAway || quickSnap() } }) // steps aside while the page's own takeover bar is up
 ipcMain.on('quick:run', (e, v) => { if (e.sender === quick?.webContents) quickRun = !!v })
 ipcMain.on('quick:move', (e, m) => {
   if (e.sender !== quick?.webContents) return
@@ -200,9 +198,8 @@ function layout() {
   bar.setBounds({ x: 0, y: 0, width: pw, height: barH })
   side?.setBounds({ x: pw, y: 0, width: SIDE, height })
   side?.setVisible(sidebarOpen)
-  const qw = Math.min(pw - 8, Math.max(560, omniR[1]) + 48), qx = Math.max(4, Math.min(pw - qw - 4, omniR[0] - 24 - Math.max(0, 560 - omniR[1]) / 2)) // lines up under the address bar
-  quick?.setBounds({ x: Math.round(qx), y: STRIP, width: qw, height: Math.min(quickH, height - STRIP) })
-  quick?.setVisible(quickOpen)
+  quick?.setBounds({ x: 0, y: STRIP, width: pw, height: height - STRIP })
+  quick?.setVisible(quickOpen && !quickAway)
 }
 
 function menu(wc, p) { // chrome's right click basics plus whatever extensions added
