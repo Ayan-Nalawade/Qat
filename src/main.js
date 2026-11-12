@@ -14,12 +14,13 @@ app.commandLine.appendSwitch('log-level', '3')
 app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|qat)\/\S+/gi, '') // some video sites stall ~25s before playing for browsers they don't recognise
 app.setAppUserModelId('qat.browser') // own taskbar group, otherwise windows shows electron.exe's icon
 process.removeAllListeners('warning')
-process.on('warning', w => /Failed to load URL/.test(w.message) || console.warn(w.name + ': ' + w.message))
+process.on('warning', w => /Failed to load URL/.test(w.message) || w.name === 'ExtensionLoadWarning' || console.warn(w.name + ': ' + w.message))
 
 const SLEEP_MS = 3 * 60 * 1000
 const HOME = 'https://www.google.com'
 const tabs = new Map()
-const STRIP = 88, SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
+const SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
+let STRIP = 88, pop, popId, popShut = 0 // STRIP grows by a row when the bookmarks bar is on
 let win, bar, side, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
 const send = (ch, ...a) => side?.webContents.send(ch, ...a)
@@ -28,6 +29,44 @@ const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(inpu
 const toBar = (ch, ...a) => bar.webContents.send(ch, ...a)
 const sendTabs = () => toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) })
 const active = () => tabs.get(activeId)
+const SET = () => path.join(app.getPath('userData'), 'settings.json')
+const conf = (k, v) => { let s = {}; try { s = JSON.parse(fs.readFileSync(SET(), 'utf8')) } catch {} if (v === undefined) return s[k]; s[k] = v; fs.writeFileSync(SET(), JSON.stringify(s, null, 2)) }
+
+// chrome's layout: loose bookmarks and "Bookmarks bar" folder on the bar, its subfolders as dropdowns, everything else under Other bookmarks
+function sendBm() {
+  const items = [], folders = new Map(), other = [], it = ({ url, title, icon }) => ({ url, title, icon })
+  for (const b of bm.all()) {
+    if (!b.folder || b.folder === 'Bookmarks bar') items.push(it(b))
+    else if (b.folder.startsWith('Bookmarks bar/')) {
+      const n = b.folder.slice(14).split('/')[0]
+      if (!folders.has(n)) items.push(folders.set(n, { name: n, items: [] }).get(n))
+      folders.get(n).items.push(it(b))
+    } else other.push(it(b))
+  }
+  toBar('bookmarks', { show: conf('bookmarksBar') !== false && bm.all().length > 0, items, other })
+}
+const sendExts = () => toBar('exts', ext.list().filter(x => x.on).map(({ id, name, icon, pin, popup, options }) => ({ id, name, icon, pin, popup: !!(popup || options) })))
+
+function shut() { const p = pop; if (!p) return; pop = null; popShut = Date.now(); win.contentView.removeChildView(p); p.webContents.close() }
+
+function extPopup(id, right) {
+  const reopen = popId === id && Date.now() - popShut < 300 // clicking the icon blurs the open popup first, so that click means close
+  shut()
+  if (reopen) return
+  const x = ext.list().find(e => e.id === id)
+  if (!x?.popup) return x?.options && newTab(x.options)
+  popId = id
+  pop = new WebContentsView({ webPreferences: { enablePreferredSizeMode: true, spellcheck: false, contextIsolation: false, preload: path.join(__dirname, 'popup-preload.js') } })
+  const wc = pop.webContents
+  pop.setBackgroundColor('#ffffff')
+  pop.setBounds({ x: right - 1, y: 50, width: 1, height: 1 })
+  win.contentView.addChildView(pop)
+  wc.on('preferred-size-changed', (e, s) => { const w = Math.min(Math.max(s.width, 25), 800), h = Math.min(Math.max(s.height, 25), 600); pop?.setBounds({ x: Math.max(0, right - w), y: 50, width: w, height: h }) })
+  wc.once('did-finish-load', () => wc.on('blur', shut)) // adding the view hands it focus for a moment, that blur isn't a click away
+  wc.setWindowOpenHandler(({ url }) => { newTab(url); return { action: 'deny' } })
+  keys(wc)
+  wc.loadURL(x.popup).catch(shut)
+}
 
 function toUrl(s) {
   s = s.trim()
@@ -43,6 +82,7 @@ function shortcut(input) {
   else if (c && k === 'w') closeTab(activeId)
   else if (c && k === 'l') focusOmnibox()
   else if (c && k === 'd') star()
+  else if (c && input.shift && k === 'b') { conf('bookmarksBar', conf('bookmarksBar') === false); sendBm() }
   else if ((c && k === 'r') || k === 'f5') active().view?.webContents.reload()
   else if (c && k === 'tab') cycle(input.shift ? -1 : 1)
   else if (input.alt && k === 'arrowleft') active().view?.webContents.navigationHistory.goBack()
@@ -65,7 +105,7 @@ function zoom(d) {
   sendTabs()
 }
 
-function star() { const t = active(); if (/^https?:/.test(t.url)) { bm.toggle(t.url, t.title); sendTabs() } }
+function star() { const t = active(); if (/^https?:/.test(t.url)) { bm.toggle(t.url, t.title, t.favicon); sendTabs(); sendBm() } }
 
 function focusOmnibox() { bar.webContents.focus(); toBar('focus-omnibox') }
 
@@ -81,11 +121,11 @@ function attach(tab) {
   wc.on('page-title-updated', (e, t) => { tab.title = t; hist.title(wc.getURL(), t); sync() })
   wc.on('did-navigate', (e, u) => { hist.visit(u, tab.typed); tab.typed = false })
   wc.on('did-start-navigation', e => { if (e.isMainFrame && !e.isSameDocument) { block.reset(wc.id); tab.favicon = '' } }) // pages without a favicon would keep the last site's
-  wc.on('page-favicon-updated', (e, f) => { tab.favicon = f[0]; sync() })
+  wc.on('page-favicon-updated', (e, f) => { tab.favicon = f[0]; sync(); bm.icon(wc.getURL(), f[0]) && sendBm() })
   for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page']) wc.on(ev, sync)
   keys(wc)
   wc.setWindowOpenHandler(({ url }) => { newTab(url); return { action: 'deny' } })
-  wc.on('input-event', (e, i) => tab === active() && heat(i.type === 'mouseMove' ? 100 : 700))
+  wc.on('input-event', (e, i) => { if (tab !== active()) return; heat(i.type === 'mouseMove' ? 100 : 700); i.type === 'mouseDown' && shut() })
   for (const ev of ['did-stop-loading', 'did-navigate-in-page', 'dom-ready']) wc.on(ev, () => tab === active() && heat(1500))
   if (tab.hist) wc.navigationHistory.restore(tab.hist).catch(() => {})
   else wc.loadURL(tab.url).catch(() => {})
@@ -189,6 +229,7 @@ function createWindow() {
   win.contentView.addChildView(bar)
   bar.webContents.loadFile(path.join(__dirname, 'ui', 'bar.html'))
   keys(bar.webContents)
+  bar.webContents.on('input-event', (e, i) => i.type === 'mouseDown' && shut())
   win.on('maximize', () => toBar('maximized', true))
   win.on('unmaximize', () => toBar('maximized', false))
   win.on('resize', layout)
@@ -219,13 +260,19 @@ ipcMain.on('star:toggle', star)
 const qh = (ch, f) => ipcMain.handle(ch, (e, ...a) => qatPage(e) ? f(...a) : undefined)
 qh('chrome:profiles', () => chrome.profiles())
 qh('bm:list', () => bm.all())
-qh('bm:remove', u => { bm.remove(u); sendTabs() })
-qh('bm:import', d => { const n = bm.add(chrome.bookmarks(d)); sendTabs(); return n })
+qh('bm:remove', u => { bm.remove(u); sendTabs(); sendBm() })
+qh('bm:import', d => { const n = bm.add(chrome.bookmarks(d)); sendTabs(); sendBm(); return n })
 qh('ext:list', () => ext.list())
-qh('ext:toggle', id => ext.toggle(id))
-qh('ext:remove', id => ext.remove(id))
-qh('ext:import', d => ext.import(chrome.extensions(d)))
-qh('ext:load', async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Pick an unpacked extension folder' }); return r.canceled ? null : ext.add(r.filePaths[0]) })
+const then = f => async (...a) => { const r = await f(...a); sendExts(); return r }
+qh('ext:toggle', then(id => ext.toggle(id)))
+qh('ext:remove', then(id => ext.remove(id)))
+qh('ext:import', then(d => ext.import(chrome.extensions(d))))
+qh('ext:load', then(async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Pick an unpacked extension folder' }); return r.canceled ? null : ext.add(r.filePaths[0]) }))
+const fromBar = f => (e, ...a) => e.sender === bar.webContents && f(...a)
+ipcMain.on('ext:popup', fromBar(extPopup))
+ipcMain.on('ext:tab', e => { e.returnValue = e.sender === pop?.webContents ? active().view?.webContents.id ?? -1 : -1 })
+ipcMain.on('ext:pin', fromBar(id => { ext.pin(id); sendExts() }))
+ipcMain.on('bar:strip', fromBar(h => { STRIP = h; layout(); heat(500) }))
 qh('ext:open', u => /^chrome-extension:\/\//.test(u) && newTab(u))
 qh('app:reset', async () => { // wipes everything qat ever saved, then starts fresh
   const s = session.defaultSession, ud = app.getPath('userData')
@@ -257,13 +304,13 @@ ipcMain.on('side:toggle', () => {
 })
 ipcMain.on('mem:sleep-all', () => sleepTabs(true))
 ipcMain.on('menu', (e, a) => ({
-  new: () => newTab(), settings: () => newTab('qat://settings'), bookmarks: () => newTab('qat://bookmarks'), extensions: () => newTab('qat://extensions'), sleep: () => sleepTabs(true), dev: () => active().view?.webContents.toggleDevTools(),
+  new: () => newTab(), settings: () => newTab('qat://settings'), bookmarks: () => newTab('qat://bookmarks'), bmbar: () => { conf('bookmarksBar', conf('bookmarksBar') === false); sendBm() }, extensions: () => newTab('qat://extensions'), sleep: () => sleepTabs(true), dev: () => active().view?.webContents.toggleDevTools(),
   zin: () => zoom(1), zout: () => zoom(-1), full: () => win.setFullScreen(!win.isFullScreen()),
 })[a]?.())
 ipcMain.on('win:min', () => win.minimize())
 ipcMain.on('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize())
 ipcMain.on('win:close', () => win.close())
-ipcMain.on('ui:ready', () => sendTabs())
+ipcMain.on('ui:ready', () => { sendTabs(); sendBm(); sendExts() })
 
 require('./ai').setup(ipcMain, () => side?.webContents)
 

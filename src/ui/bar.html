@@ -17,6 +17,7 @@
     <button id="reload" class="ib" title="Reload"><svg class="i-reload" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg><svg class="i-stop" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <div id="omni" class="lg"><input id="omnibox" type="text" placeholder="Search or enter address" autocomplete="off" spellcheck="false"><button id="star" class="ib" title="Bookmark this tab (Ctrl+D)"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg></button><button id="shield" class="ib" title="Ad blocker"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.6-3 8.5-7 10-4-1.5-7-5.4-7-10V6z"/><path class="ok" d="M9 12l2 2 4-4"/></svg><span id="shield-n"></span></button><i id="loadbar"></i></div>
+  <div id="exts" class="lg" hidden><span id="pins"></span><button id="ext-more" class="ib" title="Extensions"><svg viewBox="0 0 24 24"><path d="M10 4.5a2 2 0 0 1 4 0V6h4v4h-1.5a2 2 0 0 0 0 4H18v4h-4v-1.5a2 2 0 0 0-4 0V18H6v-4h1.5a2 2 0 0 0 0-4H6V6h4z"/></svg></button></div>
   <button id="ai-toggle" class="lg ib" title="Chat"><svg viewBox="0 0 24 24"><path d="M12 4c4.7 0 8 3 8 6.8s-3.3 6.7-8 6.7c-.9 0-1.8-.1-2.6-.3L5 19l1-3.5C4.7 14.3 4 12.6 4 10.8 4 7 7.3 4 12 4z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01" stroke-width="2.6"/></svg></button>
   <button id="menu-btn" class="lg ib" title="Menu"><svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button>
   <button id="mem" class="lg" title="Memory used by Qat. Click to sleep background tabs"><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="10" rx="2"/><path d="M9 7V4M15 7V4M9 20v-3M15 20v-3"/></svg><span id="mem-val">0 MB</span></button>
@@ -29,12 +30,20 @@
 <div id="strip" class="row">
   <div id="tabs"></div>
 </div>
+<div id="bmbar" class="row" hidden>
+  <div id="bms"></div>
+  <button id="bm-more" class="bm bmf" hidden title="More bookmarks">&raquo;</button>
+  <button id="bm-other" class="bm bmf" hidden><svg viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>Other bookmarks</button>
+</div>
 <div id="drop" class="pop" hidden></div>
+<div id="extmenu" class="pop" hidden></div>
+<div id="bmfold" class="pop" hidden></div>
 <div id="menu" class="pop" hidden>
   <button data-a="new">New tab<kbd>Ctrl+T</kbd></button>
   <div class="mrow"><span>Zoom</span><button data-a="zout" class="mi" title="Zoom out (Ctrl+-)"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button><b id="zoom-val">100%</b><button data-a="zin" class="mi" title="Zoom in (Ctrl+=)"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button><button data-a="full" class="mi" title="Full screen (F11)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div>
   <hr>
   <button data-a="bookmarks">Bookmarks</button>
+  <button data-a="bmbar">Bookmarks bar<kbd>Ctrl+Shift+B</kbd></button>
   <button data-a="extensions">Extensions</button>
   <hr>
   <button data-a="sleep">Sleep background tabs</button>

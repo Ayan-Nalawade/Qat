@@ -1,6 +1,7 @@
 const $ = s => document.querySelector(s)
 const omni = $('#omnibox'), tabsEl = $('#tabs'), cv = $('#gl')
-const MAX = 32, BH = 88
+const MAX = 32
+let BH = 88
 let state = { tabs: [], activeId: null }
 const X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'
 
@@ -69,17 +70,123 @@ function show(list) {
 // the bar view grows while a popup is open so it can hang over the page
 const fit = () => qat.barHeight(Math.max(BH, ...[...document.querySelectorAll('.pop:not([hidden])')].map(p => Math.ceil(p.getBoundingClientRect().bottom) + 16)))
 
-const menu = $('#menu'), mbtn = $('#menu-btn')
-function openMenu(on) {
-  menu.hidden = !on
-  mbtn.classList.toggle('on', on)
-  if (on) { const r = mbtn.getBoundingClientRect(); menu.style.left = Math.min(r.right, innerWidth - 8) - 280 + 'px'; menu.dataset.tone = mbtn.dataset.tone || 'dark' }
+const menu = $('#menu'), mbtn = $('#menu-btn'), extmenu = $('#extmenu'), fold = $('#bmfold'), pops = [menu, extmenu, fold]
+const mk = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls || '', textContent: txt || '' })
+let popBtn = null
+
+// one dropdown at a time, hung under whichever button opened it. same button again closes it
+function openPop(el, btn, left) {
+  const same = el && !el.hidden && popBtn === btn
+  for (const p of pops) p.hidden = true
+  popBtn?.classList.remove('on')
+  popBtn = null
+  if (el && !same) {
+    el.hidden = false
+    popBtn = btn
+    btn.classList.add('on')
+    const r = btn.getBoundingClientRect()
+    el.style.top = r.bottom + 6 + 'px'
+    el.style.left = Math.max(8, Math.min(left ? r.left : r.right - el.offsetWidth, innerWidth - el.offsetWidth - 8)) + 'px'
+    el.dataset.tone = btn.closest('.lg')?.dataset.tone || document.body.dataset.tone || 'dark'
+  }
   fit()
 }
-mbtn.onclick = () => openMenu(menu.hidden)
-menu.onclick = e => { const a = e.target.closest('[data-a]')?.dataset.a; if (!a) return; qat.menu(a); if (!['zin', 'zout'].includes(a)) openMenu(false) }
-addEventListener('keydown', e => e.key === 'Escape' && !menu.hidden && openMenu(false))
-addEventListener('blur', () => openMenu(false))
+mbtn.onclick = () => openPop(menu, mbtn)
+menu.onclick = e => { const a = e.target.closest('[data-a]')?.dataset.a; if (!a) return; qat.menu(a); if (!['zin', 'zout'].includes(a)) openPop(null) }
+addEventListener('keydown', e => e.key === 'Escape' && popBtn && openPop(null))
+addEventListener('blur', () => openPop(null))
+
+const FOLDER = '<svg viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>'
+const PIN = '<svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3H7l3-3zM12 13v7"/></svg>'
+let bmd = { show: false, items: [], other: [] }, exts = []
+
+function ico(b) {
+  const s = mk('span')
+  s.style.display = 'contents'
+  if (b.items || !b.icon) s.innerHTML = b.items ? FOLDER : ICON.url
+  else s.append(Object.assign(mk('img'), { src: b.icon, alt: '', onerror: () => { s.innerHTML = ICON.url } }))
+  return s
+}
+const open = (u, e) => e.button === 1 || e.ctrlKey ? qat.newTab(u) : qat.go(u)
+
+function showFolder(items, btn) {
+  fold.innerHTML = ''
+  for (const b of items) {
+    const r = mk('div', 'sg')
+    r.append(ico(b), mk('span', 't', b.title))
+    r.title = b.url
+    r.onmousedown = e => { e.preventDefault(); open(b.url, e); openPop(null) }
+    fold.append(r)
+  }
+  openPop(fold, btn, true)
+}
+
+function bmBtn(b) {
+  const el = mk('button', 'bm' + (b.items ? ' bmf' : ''))
+  el.append(ico(b), mk('span', '', b.items ? b.name : b.title))
+  el._b = b
+  el.title = b.items ? b.name : b.title + '\n' + b.url
+  if (b.items) el.onclick = () => showFolder(b.items, el)
+  else el.onmouseup = e => e.button < 2 && open(b.url, e)
+  return el
+}
+
+function overflow() { // anything cut off by the window edge moves into the >> dropdown
+  const box = $('#bms'), more = $('#bm-more')
+  more.hidden = false
+  for (const el of box.children) el.style.visibility = ''
+  const lim = box.getBoundingClientRect().right, hid = [...box.children].filter(el => el.getBoundingClientRect().right > lim + 1)
+  hid.forEach(el => el.style.visibility = 'hidden')
+  more.hidden = !hid.length
+  more.onclick = () => showFolder(hid.flatMap(el => el._b.items || [el._b]), more)
+}
+
+qat.on('bookmarks', d => {
+  bmd = d
+  $('#bmbar').hidden = !d.show
+  const h = d.show ? 118 : 88
+  if (h !== BH) { BH = h; cv.style.height = BH + 'px'; qat.strip(BH); fit(); want() }
+  $('#bms').replaceChildren(...d.items.map(bmBtn))
+  $('#bm-other').hidden = !d.other.length
+  $('#bm-other').onclick = () => showFolder(d.other, $('#bm-other'))
+  if (d.show) overflow()
+})
+addEventListener('resize', () => bmd.show && overflow())
+
+function fillExt() {
+  const full = exts.filter(x => x.pin).length >= 4
+  extmenu.innerHTML = ''
+  for (const x of exts) {
+    const r = mk('div', 'er'), pin = mk('button', 'mi' + (x.pin ? ' on' : ''))
+    r.append(Object.assign(mk('img'), { src: x.icon || 'icon.png', alt: '' }), mk('span', '', x.name), pin)
+    pin.innerHTML = PIN
+    pin.title = x.pin ? 'Unpin from toolbar' : full ? 'Toolbar is full, unpin one first' : 'Pin to toolbar'
+    pin.disabled = !x.pin && full
+    pin.onclick = e => { e.stopPropagation(); qat.extPin(x.id) }
+    r.onclick = () => { openPop(null); qat.extOpen(x.id, Math.round($('#ext-more').getBoundingClientRect().right)) }
+    extmenu.append(r)
+  }
+  const m = mk('div', 'er')
+  m.append(mk('span', '', 'Manage extensions'))
+  m.onclick = () => { openPop(null); qat.menu('extensions') }
+  extmenu.append(mk('hr'), m)
+  fit()
+}
+
+qat.on('exts', l => {
+  exts = l
+  $('#exts').hidden = !l.length
+  $('#pins').replaceChildren(...l.filter(x => x.pin).map(x => {
+    const b = mk('button', 'ib')
+    b.title = x.name
+    b.append(Object.assign(mk('img'), { src: x.icon || 'icon.png', alt: '' }))
+    b.onclick = () => qat.extOpen(x.id, Math.round(b.getBoundingClientRect().right))
+    return b
+  }))
+  if (!extmenu.hidden) fillExt()
+  watchRects()
+})
+$('#ext-more').onclick = () => { if (extmenu.hidden) fillExt(); openPop(extmenu, $('#ext-more')) }
 
 function build(m, g = []) {
   const v = omni.value, list = [looksUrl(v) ? { kind: 'url', text: v, url: v } : { kind: 'search', text: v, title: v + ' - Google Search', url: gsearch(v) }], seen = new Set([bare(v)])
@@ -112,7 +219,7 @@ omni.addEventListener('keydown', e => {
 })
 omni.addEventListener('focus', () => omni.select())
 omni.addEventListener('blur', () => { seq++; clearTimeout(gt); show([]); state.activeId && render() })
-addEventListener('mousedown', e => { if (e.target === document.body || e.target === document.documentElement) omni.blur(); if (!menu.hidden && !e.target.closest('#menu, #menu-btn')) openMenu(false) })
+addEventListener('mousedown', e => { if (e.target === document.body || e.target === document.documentElement) omni.blur(); if (popBtn && !e.target.closest('.pop, #menu-btn, #ext-more, .bmf')) openPop(null) })
 $('#shield').onclick = qat.shield
 $('#star').onclick = qat.star
 $('#back').onclick = qat.back
@@ -187,7 +294,7 @@ void main() {
 }
 
 function collect() {
-  items = [...document.querySelectorAll('.lg')].slice(0, MAX).map(el => {
+  items = [...document.querySelectorAll('.lg')].filter(el => el.offsetWidth).slice(0, MAX).map(el => {
     const r = el.getBoundingClientRect()
     return { el, x: r.x, y: r.y, w: r.width, h: r.height, e: el.classList.contains('active') ? 1 : el.matches(':focus-within') ? .8 : el.matches(':hover') ? .6 : 0 }
   })
@@ -209,6 +316,7 @@ function tones() {
   let gs = 0, gn = 0
   for (let i = 0; i < bits.d.length; i += 64) { gs += .2126 * bits.d[i + 2] + .7152 * bits.d[i + 1] + .0722 * bits.d[i]; gn++ }
   const g = gs / gn / 255 // mostly the whole strip's brightness, so one bright button on the page can't flip a single capsule white
+  document.body.dataset.tone = g > .6 ? 'light' : g < .45 ? 'dark' : document.body.dataset.tone || 'dark'
   for (const it of items) {
     let sum = 0, n = 0
     for (let y = Math.max(0, Math.floor(it.y * sy)); y < Math.min(bits.h, (it.y + it.h) * sy); y += 4)

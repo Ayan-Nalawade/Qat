@@ -11,11 +11,12 @@ const strip = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 module.exports = {
   all: () => list,
   has: u => list.some(b => b.url === u),
-  toggle(url, title) {
+  toggle(url, title, icon) {
     const i = list.findIndex(b => b.url === url)
-    i < 0 ? list.unshift({ url, title: title || url, folder: '' }) : list.splice(i, 1)
+    i < 0 ? list.push({ url, title: title || url, folder: '', icon }) : list.splice(i, 1)
     save()
   },
+  icon(url, f) { const b = list.find(x => x.url === url); if (!b || b.icon === f) return false; b.icon = f; save(); return true },
   remove(url) { list = list.filter(b => b.url !== url); save() },
   add(items) {
     const seen = new Set(list.map(b => b.url)), fresh = items.filter(b => /^https?:/.test(b.url) && !seen.has(b.url) && seen.add(b.url))

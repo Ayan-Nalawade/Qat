@@ -71,7 +71,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: def
 .link { align-self: flex-start; padding: 0; color: var(--accent); font-size: 12px; }
 .link:hover { text-decoration: underline; }
 .ctl { height: 32px; padding: 0 10px; border-radius: 10px; background: var(--glass); border: 1px solid var(--border); color: var(--text); font: inherit; outline: 0; user-select: text; min-width: 0; }
-.ctl option { color: #14161c; }
+.ctl option { background: var(--bg); color: var(--text); }
 .ctl:focus { border-color: var(--accent); }
 .pk { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .pk-row { display: flex; gap: 6px; flex: none; }

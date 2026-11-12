@@ -18,14 +18,14 @@ function info(e) {
   const icon = Object.entries(m.icons || {}).sort((a, b) => b[0] - a[0])[0]?.[1]
   let img = ''
   try { img = icon && 'data:image/png;base64,' + fs.readFileSync(path.join(e.path, icon)).toString('base64') } catch {}
-  return { id: e.id, name: t(m.name), version: m.version, description: t(m.description), on: e.on, error: e.error || '', icon: img, popup: page((m.action || m.browser_action)?.default_popup), options: page(m.options_ui?.page || m.options_page) }
+  return { id: e.id, name: t(m.name), version: m.version, description: t(m.description), on: e.on, pin: !!e.pin, error: e.error || '', icon: img, popup: page((m.action || m.browser_action)?.default_popup), options: page(m.options_ui?.page || m.options_page) }
 }
 
 async function add(p) {
   try {
     const e = await load(p)
     list = list.filter(x => x.id !== e.id)
-    list.push({ id: e.id, path: p, on: true, manifest: e.manifest })
+    list.push({ id: e.id, path: p, on: true, pin: list.filter(x => x.pin).length < 4, manifest: e.manifest })
     save()
     return null
   } catch (err) { return path.basename(p) + ': ' + err.message }
@@ -41,6 +41,10 @@ module.exports = {
     e.on = !e.on
     e.on ? await load(e.path).catch(err => { e.error = err.message }) : ext().removeExtension(id)
     save()
+  },
+  pin(id) { // the toolbar holds 4, the rest live behind the puzzle button
+    const e = list.find(x => x.id === id)
+    if (e.pin || list.filter(x => x.pin).length < 4) { e.pin = !e.pin; save() }
   },
   remove(id) {
     const e = list.find(x => x.id === id)
