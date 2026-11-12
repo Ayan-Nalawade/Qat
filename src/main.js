@@ -12,7 +12,9 @@ app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess
 app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2') // network runs inside the main process, one less process
 app.commandLine.appendSwitch('js-flags', '--optimize-for-size') // smaller v8 heaps in every page, ~7% less ram across tabs
 app.commandLine.appendSwitch('log-level', '3')
-app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|qat)\/\S+/gi, '') // some video sites stall ~25s before playing for browsers they don't recognise
+// sign in pages get this, the rest get it cleaned
+const NATIVE = app.userAgentFallback
+app.userAgentFallback = NATIVE.replace(/ (Electron|qat)\/\S+/gi, '') // some video sites stall ~25s before playing for browsers they don't recognise
 app.setAppUserModelId('qat.browser') // own taskbar group, otherwise windows shows electron.exe's icon
 process.removeAllListeners('warning')
 process.on('warning', w => /Failed to load URL/.test(w.message) || w.name === 'ExtensionLoadWarning' || console.warn(w.name + ': ' + w.message))
@@ -109,7 +111,7 @@ function attach(tab) {
   const sync = () => { tab.url = wc.getURL() || tab.url; tab.loading = wc.isLoading(); tab.canGoBack = wc.navigationHistory.canGoBack(); tab.canGoForward = wc.navigationHistory.canGoForward(); sendTabs() }
   wc.on('page-title-updated', (e, t) => { tab.title = t; hist.title(wc.getURL(), t); sync() })
   wc.on('did-navigate', (e, u) => { hist.visit(u, tab.typed); tab.typed = false })
-  wc.on('did-start-navigation', e => { if (e.isMainFrame && !e.isSameDocument) { block.reset(wc.id); tab.favicon = ''; tab.certErr = '' } }) // pages without a favicon would keep the last site's
+  wc.on('did-start-navigation', e => { if (e.isMainFrame && !e.isSameDocument) { block.reset(wc.id); tab.favicon = ''; tab.certErr = '' } })
   wc.on('did-fail-load', (e, code, desc, u, main) => { if (main && /^ERR_(CERT|SSL)/.test(desc)) { tab.certErr = desc; sync() } }) // chromium refused the certificate, the page never loaded
   const check = () => scam && !tab.certErr && !wc.isDestroyed() && ready() && site.scan(wc, wc.getURL(), ask, sendTabs)
   wc.on('dom-ready', () => setTimeout(check, 600)) // ads can keep a page loading forever, the text is there by now
@@ -467,6 +469,7 @@ function qatFile(req) {
 }
 
 app.whenReady().then(async () => {
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*', 'https://accounts.youtube.com/*'] }, (d, cb) => cb({ requestHeaders: { ...d.requestHeaders, 'User-Agent': NATIVE } })) // google's sign in turns away chromium posing as chrome, electron saying it's electron gets through. header only, switching the tab's own agent mid load makes chromium reload the page
   protocol.handle('qat', req => { const f = qatFile(req); return f ? net.fetch(pathToFileURL(f).toString()) : new Response('Not found', { status: 404 }) })
   crx = new ElectronChromeExtensions({ // fills in the chrome.* apis electron lacks: tabs, windows, webNavigation, contextMenus, action popups
     createTab: d => { newTab(d.url || HOME); return [active().view.webContents, win] },
