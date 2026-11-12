@@ -29,7 +29,7 @@ const send = (ch, ...a) => live(side) && side.webContents.send(ch, ...a)
 const ui = () => { const v = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } }); v.webContents.on('will-navigate', e => e.preventDefault()); v.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); return v } // these get window.qat, so they never leave their own page
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
 const toBar = (ch, ...a) => live(bar) && bar.webContents.send(ch, ...a)
-const sendTabs = () => (send('ai:tab', { title: active()?.title, url: active()?.url, favicon: active()?.favicon }), toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) }))
+const sendTabs = () => !win?.isDestroyed() && (send('ai:tab', { title: active()?.title, url: active()?.url, favicon: active()?.favicon }), toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view }) => ({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) }))
 const active = () => tabs.get(activeId)
 const tabOf = wc => [...tabs.values()].find(t => t.view?.webContents === wc)
 const SET = () => path.join(app.getPath('userData'), 'settings.json')
@@ -247,7 +247,12 @@ function createWindow() {
   win.on('maximize', () => toBar('maximized', true))
   win.on('unmaximize', () => toBar('maximized', false))
   win.on('resize', layout)
-  win.on('closed', () => { timers.forEach(clearInterval); app.quit() }) // the timers touch the window, after it's gone each tick threw 'Object has been destroyed'
+  win.on('closed', () => { // timers and messages already in flight from the bar touched the dead window and threw 'Object has been destroyed'
+    timers.forEach(clearInterval)
+    clearTimeout(countTimer)
+    ipcMain.removeAllListeners()
+    app.quit()
+  })
   newTab()
 }
 
