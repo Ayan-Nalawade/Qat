@@ -146,6 +146,8 @@ void main() {
   for (int i = 0; i < ${MAX}; i++) { if (i >= u_n) break; float s = sdf(p, u_rect[i]); if (s < best) { best = s; k = i; } }
   vec3 bg = blur(p, 11.);
   bg = mix(bg, blur(p, 24.), .6);
+  bg = mix(bg, blur(p, 48.), .5);
+  bg = mix(vec3(dot(bg, vec3(.299, .587, .114))), bg, .35); // muted, page colours shouldn't bleed into the bar
   if (k < 0) { o = vec4(bg, 1); return; }
   vec4 r = u_rect[k]; float e = u_emph[k], tn = u_tone[k], f = smoothstep(.45, .9, u_lum[k]); // brighter backdrop = frostier, less shine
   bg *= 1. - pow(1. - clamp(best / 9., 0., 1.), 2.) * (.14 + .16 * tn) * step(0., best);
@@ -157,9 +159,9 @@ void main() {
   vec3 c = vec3(0);
   for (int j = 0; j < 9; j++) { vec2 q = vec2(float(j % 3) - 1., float(j / 3) - 1.) * 2.4; c += vec3(tx(p - off + q).r, tx(p - off * 1.05 + q).g, tx(p - off * 1.1 + q).b); }
   c /= 9.;
-  c = mix(c, blur(p, 14.), .45 + .4 * f); // wide average stops one small bright button flooding the whole capsule
-  c = mix(vec3(dot(c, vec3(.299, .587, .114))), c, 1.15 + .06 * e - .25 * f);
-  c = mix(c, mix(vec3(.08, .09, .12), vec3(1.), tn), .45 + .05 * e + .2 * f);
+  c = mix(c, blur(p, 14.), .6 + .3 * f); // wide average stops one small bright button flooding the whole capsule
+  c = mix(vec3(dot(c, vec3(.299, .587, .114))), c, .7 + .06 * e - .2 * f);
+  c = mix(c, mix(vec3(.08, .09, .12), vec3(1.), tn), .55 + .05 * e + .2 * f);
   float L = max(dot(n, normalize(vec2(-1., -1.))), 0.);
   c += (pow(1. - clamp(d / 8., 0., 1.), 3.) * .08 * L + .03 * (1. - (p.y - r.y) / r.w)) * (1. - f); // soft inner light, no hard rim line
   c = clamp(c, 0., 1.); // clamp first or the light-backdrop rim below darkens >1 values back to pure white
@@ -200,6 +202,9 @@ function watchRects() {
 function tones() {
   if (!bits) return
   const sx = bits.w / innerWidth, sy = bits.h / BH
+  let gs = 0, gn = 0
+  for (let i = 0; i < bits.d.length; i += 64) { gs += .2126 * bits.d[i + 2] + .7152 * bits.d[i + 1] + .0722 * bits.d[i]; gn++ }
+  const g = gs / gn / 255 // mostly the whole strip's brightness, so one bright button on the page can't flip a single capsule white
   for (const it of items) {
     let sum = 0, n = 0
     for (let y = Math.max(0, Math.floor(it.y * sy)); y < Math.min(bits.h, (it.y + it.h) * sy); y += 4)
@@ -208,7 +213,7 @@ function tones() {
         sum += .2126 * bits.d[i + 2] + .7152 * bits.d[i + 1] + .0722 * bits.d[i]
         n++
       }
-    const l = it.l = n ? sum / n / 255 : 0, t = it.el.dataset.tone
+    const l = it.l = .35 * (n ? sum / n / 255 : g) + .65 * g, t = it.el.dataset.tone
     if (l > .6 && t !== 'light') it.el.dataset.tone = 'light'
     else if (l < .45 && t !== 'dark') it.el.dataset.tone = 'dark'
   }
