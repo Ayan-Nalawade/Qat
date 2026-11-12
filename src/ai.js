@@ -32,10 +32,10 @@ const headers = (id, c) => ({ 'Content-Type': 'application/json', ...(c.key && {
 function setup(ipcMain, ui, browser) {
   const runs = new Map()
   let last = Promise.resolve() // a new chat waits for the stopped run to clean up its overlay, otherwise that wipes the new run's refs
-  const ok = e => e.sender === ui() || !!e.senderFrame?.url.startsWith('qat://')
+  const uis = () => [].concat(ui()).filter(w => w && !w.isDestroyed()), ok = e => uis().includes(e.sender) || !!e.senderFrame?.url.startsWith('qat://')
   const handle = (ch, f) => ipcMain.handle(ch, (e, ...a) => ok(e) ? f(e, ...a) : undefined)
   const on = (ch, f) => ipcMain.on(ch, (e, ...a) => ok(e) && f(e, ...a))
-  const changed = () => { const p = pub(); ui()?.send('ai:changed', p); return p }
+  const changed = () => { const p = pub(); uis().forEach(w => w.send('ai:changed', p)); return p }
 
   handle('ai:settings', () => pub())
 
@@ -75,18 +75,19 @@ function setup(ipcMain, ui, browser) {
     return (j.data || j).map(m => m.id).sort()
   })
 
-  on('ai:chat', async (e, { rid, messages, agent }) => {
-    const id = pub().provider, c = conf(id), ac = new AbortController(), out = (ch, d) => e.sender.isDestroyed() || e.sender.send(ch, { rid, ...d }), prev = last
-    runs.set(rid, ac)
-    last = (async () => {
+  on('ai:chat', async (e, { rid, messages, agent, quick }) => {
+    const id = pub().provider, c = conf(id), ac = new AbortController(), out = (ch, d) => e.sender.isDestroyed() || e.sender.send(ch, { rid, ...d }), key = e.sender.id + ':' + rid, prev = quick ? null : last
+    runs.set(key, ac)
+    const job = (async () => {
       await prev
-      try { await run({ base: c.base, model: c.model, headers: headers(id, c), history: messages, agent, signal: ac.signal, browser, out }) }
+      try { await run({ base: c.base, model: c.model, headers: headers(id, c), history: messages, agent, quick, signal: ac.signal, browser, out }) }
       catch (err) { out('ai:error', { message: err.message }) }
-      finally { runs.delete(rid) }
+      finally { runs.delete(key) }
     })()
+    if (!quick) last = job // quick asks never touch the page, no need to queue them behind the sidebar
   })
 
-  on('ai:stop', (e, rid) => runs.get(rid)?.abort())
+  on('ai:stop', (e, rid) => runs.get(e.sender.id + ':' + rid)?.abort())
   return { stop: () => runs.forEach(a => a.abort()) }
 }
 

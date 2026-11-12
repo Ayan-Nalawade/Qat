@@ -3,7 +3,6 @@ const sel = Object.assign(document.createElement('select'), { className: 'ctl' }
 let cache = {}, cfg, msgs = [], busy = false, rid = 0, err = '', stick = true, tab = {}, agent = true
 try { agent = localStorage.agent !== '0' } catch {}
 
-const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const I = {
   ok: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', err: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
   globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>',
@@ -12,32 +11,6 @@ const I = {
 }
 const SICO = ['<path d="M5 7h14M5 12h14M5 17h9"/>', '<path d="M7 4h10v16l-5-3.5L7 20z"/>', '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>', '<path d="M4 20h4L19 9l-4-4L4 16z"/>']
 const SUGG = [['Summarise this page', 'Summarise this page in a few bullet points.'], ['What matters on this page?', 'What are the most important things on this page?'], ['Look something up', 'Search the web and find '], ['Help me fill in this form', 'Help me fill in the form on this page. Ask me for anything you need.']]
-
-function md(src) {
-  const stash = []
-  const keep = h => '\0' + (stash.push(h) - 1) + '\0', inl = h => '\x01' + (stash.push(h) - 1) + '\x01'
-  let s = esc(src).replace(/```[^\n`]*\n?([\s\S]*?)(```|$)/g, (m, c) => keep('<div class="code"><button class="copy">Copy</button><pre><code>' + c.replace(/\n$/, '') + '</code></pre></div>'))
-  s = s.replace(/`([^`\n]+)`/g, (m, c) => inl('<code>' + c + '</code>')).replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, t, u) => inl('<a href="#" data-u="' + u + '">' + t + '</a>')) // links stashed before bold and italic so a * in a url stays put
-  const inline = t => t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*([^*\s][^*]*?)\*/g, '<i>$1</i>')
-  let out = '', list = '', para = []
-  const flush = () => { if (para.length) out += '<p>' + inline(para.join('<br>')) + '</p>'; para = [] }
-  const close = () => { if (list) out += '</' + list + '>'; list = '' }
-  for (const line of s.split('\n')) {
-    let m
-    if (!line.trim()) { flush(); close() }
-    else if (/^\0\d+\0$/.test(line.trim())) { flush(); close(); out += line.trim() }
-    else if ((m = line.match(/^#{1,3}\s+(.*)/))) { flush(); close(); out += '<p class="h">' + inline(m[1]) + '</p>' }
-    else if ((m = line.match(/^\s*([-*]|\d+\.)\s+(.*)/))) {
-      flush()
-      const t = /\d/.test(m[1]) ? 'ol' : 'ul'
-      if (list !== t) { close(); out += '<' + t + '>'; list = t }
-      out += '<li>' + inline(m[2]) + '</li>'
-    } else { close(); para.push(line) }
-  }
-  flush(); close()
-  const un = h => h.replace(/[\0\x01](\d+)[\0\x01]/g, (m, i) => stash[i])
-  return un(un(out))
-}
 
 function steps(p, live) {
   const d = document.createElement('details'), bad = p.steps.some(s => s.state === 'err'), bg = p.steps.every(s => s.web)
@@ -237,6 +210,7 @@ qat.on('ai:chunk', d => {
   redrawLast()
 })
 qat.on('ai:break', () => {})
+qat.on('chat:import', m => { if (busy) qat.ai.stop(rid); rid++; setBusy(false); msgs = m; err = ''; closePick(); draw() }) // a quick ask moved over here
 qat.on('ai:step', d => {
   if (!mine(d)) return
   const parts = msgs.at(-1).parts

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https: http: qat:; style-src 'self' 'unsafe-inline'">
+<title>Quick ask</title>
+<link rel="stylesheet" href="quick.css">
+</head>
+<body data-veil=".55" data-tone="dark">
+<div id="glow"><i class="halo"></i><i class="ring"></i></div>
+<main id="q">
+  <section id="ans" class="lg" hidden>
+    <header><span id="ans-q"></span><button id="ans-x" class="ib" title="Close (Esc)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+    <div id="ans-scroll" data-clip><div id="ans-stat" hidden><i class="spin"></i><span></span></div><div id="ans-body"></div></div>
+    <footer id="ans-act" hidden>
+      <button id="copy" class="act"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Copy</span></button>
+      <button id="move" class="act"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M14 5v14"/></svg>Continue in assistant</button>
+      <button id="fresh" class="act">New question</button>
+    </footer>
+  </section>
+  <form id="ask" class="lg">
+    <i id="orb"></i>
+    <input id="q-in" type="text" autocomplete="off" spellcheck="false" placeholder="Ask anything">
+    <kbd>Esc</kbd>
+    <button id="q-send" title="Ask (Enter)"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+  </form>
+</main>
+<script src="md.js"></script>
+<script src="quick.js"></script>
+<script src="glass.js"></script>
+</body>
+</html>

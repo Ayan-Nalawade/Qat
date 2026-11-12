@@ -22,7 +22,7 @@ const HOME = 'https://www.google.com'
 const tabs = new Map()
 const SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
 let STRIP = 88, crx, timers = [] // STRIP grows by a row when the bookmarks bar is on
-let win, bar, side, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
+let win, bar, side, quick, quickOpen = false, quickBusy = false, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
 const live = v => v && !v.webContents.isDestroyed()
 const send = (ch, ...a) => live(side) && side.webContents.send(ch, ...a)
@@ -62,7 +62,8 @@ function toUrl(s) {
 function shortcut(input) {
   if (input.type !== 'keyDown') return false
   const c = input.control || input.meta, k = input.key.toLowerCase()
-  if (c && !input.shift && !input.alt && k === 't') newTab()
+  if (c && !input.shift && !input.alt && k === ' ') toggleQuick()
+  else if (c && !input.shift && !input.alt && k === 't') newTab()
   else if (c && k === 'w') closeTab(activeId)
   else if (c && k === 'l') focusOmnibox()
   else if (c && k === 'd') star()
@@ -145,6 +146,42 @@ function sideSnap() {
   wc.capturePage({ x, y: 0, width: pw - x, height: h }).then(img => { img = img.resize({ width: 40, quality: 'good' }); const { width, height } = img.getSize(); send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { sideBusy = false })
 }
 
+// ctrl+space: a see-through layer over the page with its own little ask box, the glass is a blurred copy of the whole page
+function toggleQuick(open = !quickOpen) {
+  if (open && !active()?.view) return
+  quickOpen = open
+  if (open && !quick) {
+    quick = ui()
+    quick.setBackgroundColor('#00000000')
+    keys(quick.webContents)
+    quick.webContents.loadFile(path.join(__dirname, 'ui', 'quick.html'))
+    quick.webContents.once('did-finish-load', () => quickOpen && showQuick())
+  }
+  if (open && !quick.webContents.isLoading()) showQuick()
+  layout()
+  if (!open) active()?.view?.webContents.focus()
+}
+function showQuick() {
+  win.contentView.addChildView(quick)
+  layout()
+  quickSnap()
+  quick.webContents.focus()
+  quick.webContents.send('quick:open', { title: active()?.title, url: active()?.url })
+}
+function quickSnap() {
+  const wc = active()?.view?.webContents
+  if (!quickOpen || !live(quick) || quickBusy || !wc || win.isMinimized()) return
+  quickBusy = true
+  wc.capturePage().then(img => { img = img.resize({ width: 64, quality: 'good' }); const { width, height } = img.getSize(); live(quick) && quick.webContents.send('glass:frame', { width, height, data: img.toBitmap() }) }, () => {}).finally(() => { quickBusy = false })
+}
+ipcMain.on('quick:close', e => e.sender === quick?.webContents && toggleQuick(false))
+ipcMain.on('quick:move', (e, m) => {
+  if (e.sender !== quick?.webContents) return
+  toggleQuick(false)
+  if (!sidebarOpen) toggleSide()
+  side.webContents.isLoading() ? side.webContents.once('did-finish-load', () => send('chat:import', m)) : send('chat:import', m)
+})
+
 function purge(tab) {
   const d = tab !== active() && live(tab.view) && tab.view.webContents.debugger
   if (!d || d.isAttached()) return
@@ -159,6 +196,8 @@ function layout() {
   bar.setBounds({ x: 0, y: 0, width: pw, height: barH })
   side?.setBounds({ x: pw, y: 0, width: SIDE, height })
   side?.setVisible(sidebarOpen)
+  quick?.setBounds({ x: 0, y: STRIP, width: pw, height: height - STRIP })
+  quick?.setVisible(quickOpen)
 }
 
 function menu(wc, p) { // chrome's right click basics plus whatever extensions added
@@ -183,6 +222,7 @@ function newTab(url = HOME) {
 
 function activate(id) {
   if (!tabs.has(id)) return
+  if (quickOpen) toggleQuick(false)
   const prev = active()
   if (prev && prev !== tabs.get(id) && prev.view) { win.contentView.removeChildView(prev.view); prev.lastActive = Date.now(); setTimeout(() => purge(prev), 30000) }
   activeId = id
@@ -303,7 +343,8 @@ ipcMain.handle('omni:search', (e, q) => fetch('https://suggestqueries.google.com
 ipcMain.on('nav:back', () => active().view.webContents.navigationHistory.goBack())
 ipcMain.on('nav:forward', () => active().view.webContents.navigationHistory.goForward())
 ipcMain.on('nav:reload', () => { const wc = active().view.webContents; wc.isLoading() ? wc.stop() : wc.reload() })
-ipcMain.on('side:toggle', () => {
+ipcMain.on('side:toggle', () => toggleSide())
+function toggleSide() {
   sidebarOpen = !sidebarOpen
   if (!side) { // chat only exists once it's been opened, the window itself has no page
     side = ui()
@@ -319,7 +360,7 @@ ipcMain.on('side:toggle', () => {
   sideAt = 0
   sideSnap()
   if (sidebarOpen) side.webContents.focus()
-})
+}
 ipcMain.on('mem:sleep-all', () => sleepTabs(true))
 ipcMain.on('menu', (e, a) => ({
   new: () => newTab(), settings: () => newTab('qat://settings'), bookmarks: () => newTab('qat://bookmarks'), bmbar: () => { conf('bookmarksBar', conf('bookmarksBar') === false); sendBm() }, extensions: () => newTab('qat://extensions'), sleep: () => sleepTabs(true), dev: () => active().view?.webContents.toggleDevTools(),
@@ -330,7 +371,7 @@ ipcMain.on('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize(
 ipcMain.on('win:close', () => win.close())
 ipcMain.on('ui:ready', () => { sendTabs(); sendBm(); sendExts() })
 
-const ai = require('./ai').setup(ipcMain, () => side?.webContents, {
+const ai = require('./ai').setup(ipcMain, () => [side?.webContents, quick?.webContents], {
   wc: () => active()?.view?.webContents,
   list: () => [...tabs.values()].map(t => ({ title: t.title, url: t.url, active: t.id === activeId })),
   open: u => { u = toUrl(u); if (!web(u)) throw new Error('Only web pages can be opened'); newTab(u) },
@@ -360,7 +401,7 @@ app.whenReady().then(async () => {
   await ext.start()
   block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   createWindow()
-  timers = [setInterval(() => sleepTabs(false), 60000), setInterval(meter, 5000), setInterval(snap, 500), setInterval(sideSnap, 1500)]
+  timers = [setInterval(() => sleepTabs(false), 60000), setInterval(meter, 5000), setInterval(snap, 500), setInterval(() => { sideSnap(); quickSnap() }, 1500)]
 })
 app.on('window-all-closed', () => app.quit())
 app.on('will-quit', hist.flush)
