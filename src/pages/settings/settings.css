@@ -89,3 +89,47 @@ select.ctl { appearance: none; padding-right: 28px; background-image: url("data:
 
 @media (max-width: 760px) { nav { display: none; } main { padding: 20px 16px 60px; } }
 #list { margin-top: 22px; }
+
+.ctx-menu {
+  position: fixed;
+  background: var(--side);
+  border: 1px solid var(--hr);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 1000;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+}
+.ctx-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  font: inherit;
+}
+.ctx-item:hover {
+  background: var(--faint);
+}
+
+.drag-handle {
+  color: var(--dim);
+  cursor: grab;
+  padding: 0 6px;
+  user-select: none;
+}
+.drag-handle:hover {
+  color: var(--fg);
+}
+.item.dragging {
+  opacity: .5;
+  background: var(--faint);
+}
+.item select.folder-sel {
+  width: 140px;
+  flex: none;
+}

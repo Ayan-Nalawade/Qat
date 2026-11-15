@@ -12,13 +12,18 @@ const strip = u => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 module.exports = {
   all: () => list,
   has: u => list.some(b => b.url === u),
-  toggle(url, title, icon) {
+  toggle(url, title, icon, folder = '') {
     const i = list.findIndex(b => b.url === url)
-    i < 0 ? list.push({ url, title: title || url, folder: '', icon }) : list.splice(i, 1)
+    if (i < 0) {
+      list.push({ url, title: title || url, folder, icon })
+    } else {
+      list.splice(i, 1)
+    }
     save()
   },
   icon(url, f) { const b = list.find(x => x.url === url); if (!b || b.icon === f) return false; b.icon = f; save(); return true },
   remove(url, folder) { list = list.filter(b => b.url !== url || (folder !== undefined && b.folder !== folder)); save() },
+  move(url, folder) { const b = list.find(x => x.url === url); if (b) { b.folder = folder; save() } },
   add(items) {
     const seen = new Set(list.map(b => b.url)), fresh = items.filter(b => /^https?:/.test(b.url) && !seen.has(b.url) && seen.add(b.url))
     list.push(...fresh)
@@ -29,5 +34,13 @@ module.exports = {
     const words = q.trim().toLowerCase().split(/\s+/)
     return list.filter(b => { const hay = (strip(b.url) + ' ' + b.title).toLowerCase(); return words.every(w => hay.includes(w)) })
       .sort((a, b) => strip(b.url).toLowerCase().startsWith(words[0]) - strip(a.url).toLowerCase().startsWith(words[0])).slice(0, 3)
+  },
+  createFolder(name) {
+    name = (name || '').trim()
+    if (!name) return 0
+    if (list.some(b => b.folder === name && b.url === '__FOLDER__')) return 0
+    list.push({ url: '__FOLDER__', title: name, folder: name, icon: '' })
+    save()
+    return 1
   },
 }
