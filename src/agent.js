@@ -313,9 +313,10 @@ async function run({ base, model, headers, history, agent, quick, signal, out, b
   const t = tools(browser, signal, quick), msgs = [{ role: 'system', content: prompt(agent, browser) + (quick ? `
 
 This came from the quick ask bar, not the chat panel. ${agent ? 'If it needs doing, do it in their tab, then' : 'To answer about their page, fetch its url. Then'} reply in a few short sentences or a short list.` : '') }, ...history]
-  let useTools = true, images = true, step, stopped
+  let useTools = true, images = true, step, stopped, bad = 0
+  const MAX = 200 // a runaway agent is worse than a short answer: this is a fuse, not a step budget
   try {
-    for (step = 0; step < 40 && !stopped; step++) {
+    for (step = 0; !stopped; step++) { // runs until the model stops calling tools, the user hits Stop, or it errors
       prune(msgs)
       const body = { model, stream: true, messages: msgs.map(({ name, ...m }) => m), ...(useTools && { tools: agent ? [...WEB, ...TOOLS] : WEB }) }
       const r = await fetch(base + '/chat/completions', { method: 'POST', headers, signal, body: JSON.stringify(body) })
@@ -383,12 +384,15 @@ This came from the quick ask bar, not the chat panel. ${agent ? 'If it needs doi
           if (res?.image) { images ? pics.push(res.image) : 0; res = images ? res.text : "This model can't take images, use look instead." }
           out('ai:step', { id: c.id, state: 'ok' })
         } catch (e) { res = 'Error: ' + e.message; out('ai:step', { id: c.id, state: 'err', detail: e.message }); if (e.halt && !stopped) { stopped = true; out('ai:note', { text: e.message }) } }
+        if (String(res).startsWith('Error:')) bad++; else bad = 0
         msgs.push({ role: 'tool', tool_call_id: c.id, name: c.name, content: String(res) })
       }
       for (const p of pics) msgs.push({ role: 'user', content: [{ type: 'text', text: 'Screenshot of the current tab:' }, { type: 'image_url', image_url: { url: p } }] })
       if (signal.aborted) break
+      // fuse: no cap on useful work, but stop if every tool keeps failing or it runs absurdly long
+      if (bad >= 6) { out('ai:note', { text: 'I stopped because the last 6 tool calls all failed. Tell me what to do differently.' }); break }
+      if (step >= MAX) { out('ai:note', { text: 'I stopped after a very long run, in case it was looping. Say continue to keep going.' }); break }
     }
-    if (step >= 40) out('ai:note', { text: 'I stopped after 40 steps. Say continue if you want me to keep going.' })
     out('ai:done')
   } catch (e) {
     signal.aborted ? out('ai:done') : out('ai:error', { message: e.message + (e.cause ? ': ' + e.cause.message : '') })
