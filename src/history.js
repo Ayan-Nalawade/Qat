@@ -47,8 +47,8 @@ module.exports = {
     }
     items.sort((a, b) => b.sc - a.sc)
     let inline = [...hosts].sort((a, b) => b[1] - a[1])[0]?.[0] || ''
+    if (inline && q.startsWith('www.')) inline = 'www.' + inline // hosts are stored without the www, so restore it before the length check drops the match
     if (!inline || q.length > inline.length) inline = items.map(i => strip(i.e.u)).find(s => s.startsWith(q)) || ''
-    if (inline && q.startsWith('www.')) inline = 'www.' + inline
     return { inline, items: items.slice(0, 5).map(({ e }) => ({ url: e.u, title: e.t })) }
   },
 }

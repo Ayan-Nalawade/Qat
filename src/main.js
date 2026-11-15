@@ -4,7 +4,7 @@ const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { pathToFileURL } = require('url')
-const put = require('./put'), block = require('./block'), site = require('./site'), { ask, ready } = require('./ai'), hist = require('./history'), bm = require('./bookmarks'), ext = require('./extensions'), chrome = require('./chrome')
+const put = require('./put'), block = require('./block'), site = require('./site'), { ask, ready } = require('./ai'), hist = require('./history'), bm = require('./bookmarks'), ext = require('./extensions'), chrome = require('./chrome'), web = require('./web')
 protocol.registerSchemesAsPrivileged([{ scheme: 'qat', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 app.commandLine.appendSwitch('process-per-site')
 app.commandLine.appendSwitch('renderer-process-limit', '6')
@@ -21,25 +21,36 @@ process.on('warning', w => /Failed to load URL/.test(w.message) || w.name === 'E
 
 const SLEEP_MS = 3 * 60 * 1000
 const HOME = 'https://www.google.com'
+const INCOG = 'qat-incognito' // no "persist:" prefix, so the whole session lives in memory and dies with the app
+const incogSession = () => session.fromPartition(INCOG)
+const INCOG_ARG = '--incognito' // what the taskbar jump list passes back in on a cold start
+let wantIncog = process.argv.includes(INCOG_ARG)
+// A second launch (taskbar jump list, or opening the exe twice) must hand its args to the window we already
+// have instead of starting a rival copy with its own windows and its own non-persistent incognito session.
+const solo = app.requestSingleInstanceLock()
+if (!solo) app.quit()
 const tabs = new Map()
 const SIDE = 376, BUDGET = Math.max(768, os.totalmem() / 2 ** 20 / 16)
-let STRIP = 88, crx, timers = [] // STRIP grows by a row when the bookmarks bar is on
-let win, bar, side, quickBusy = false, quiet = false, barH = STRIP, countTimer, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
+let STRIP = 88, crx, timers = [], countTimer, purgeTimers = new Set() // STRIP grows by a row when the bookmarks bar is on
+let win, bar, side, quickBusy = false, quiet = false, barH = STRIP, activeId = null, nextId = 1, sidebarOpen = false, pw = 0, hot = 0, busy = false
 
 const live = v => v && !v.webContents.isDestroyed()
 const send = (ch, ...a) => live(side) && side.webContents.send(ch, ...a)
 const ui = () => { const v = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } }); v.webContents.on('will-navigate', e => e.preventDefault()); v.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); return v } // these get window.qat, so they never leave their own page
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
 const toBar = (ch, ...a) => live(bar) && bar.webContents.send(ch, ...a)
-const sendTabs = () => !win?.isDestroyed() && (send('ai:tab', { title: active()?.title, url: active()?.url, favicon: active()?.favicon }), toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, view, certErr, q }) => ({ id, title, ai: !!q?.run, url, favicon, loading, canGoBack, canGoForward, sleeping, sec: site.sec(url, certErr), risk: scam ? site.risk(url) : null, starred: bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) }))
+const sendTabs = () => !win?.isDestroyed() && (send('ai:tab', { title: active()?.title, url: active()?.url, favicon: active()?.favicon, incog: !!active()?.incog }), toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, incog, view, certErr, q }) => ({ id, title, ai: !!q?.run, url, favicon, loading, canGoBack, canGoForward, sleeping, incog: !!incog, sec: site.sec(url, certErr), risk: scam && !incog ? site.risk(url) : null, starred: !incog && bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: !incog && block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) }))
 const active = () => tabs.get(activeId)
 const tabOf = wc => [...tabs.values()].find(t => t.view?.webContents === wc)
+// which tab a renderer message came from: the page itself, its quick-ask overlay, or the toolbar (meaning the active tab)
+const ctxTab = e => { const wc = e.sender; return tabOf(wc) || [...tabs.values()].find(t => t.q?.view?.webContents === wc) || (wc === bar?.webContents || wc === side?.webContents ? active() : null) } // the toolbar and the sidebar both act on the active tab
 const SET = () => path.join(app.getPath('userData'), 'settings.json')
 const conf = (k, v) => { let s = {}; try { s = JSON.parse(fs.readFileSync(SET(), 'utf8')) } catch {} if (v === undefined) return s[k]; s[k] = v; put(SET(), JSON.stringify(s, null, 2)) }
-const web = u => /^(https?|qat|chrome-extension):/i.test(u) // what pages and the assistant may open, no file: or javascript:
+const isWebUrl = u => /^(https?|qat|chrome-extension):/i.test(u) // what pages and the assistant may open, no file: or javascript:
 let boot = Promise.resolve(), warmed = new Map(), scam = conf('scamCheck') !== false // ai scam check, on unless turned off in settings
-// dns + tls done before the click, saves a round trip or three on the actual load
-const warm = u => { let o; try { o = new URL(u).origin } catch { return } if (!/^https?:/.test(o) || Date.now() - (warmed.get(o) || 0) < 10000) return; if (warmed.size > 300) warmed.clear(); warmed.set(o, Date.now()); session.defaultSession.preconnect({ url: o, numSockets: 1 }) }
+// dns + tls done before the click, saves a round trip or three on the actual load. incognito preconnects on its
+// own session, otherwise the hostname leaks into the persistent session's socket and dns pool just by typing it.
+const warm = (u, incog) => { let o; try { o = new URL(u).origin } catch { return } if (!/^https?:/.test(o)) return; const k = (incog ? 'i:' : '') + o; if (Date.now() - (warmed.get(k) || 0) < 10000) return; if (warmed.size > 300) warmed.clear(); warmed.set(k, Date.now()); (incog ? incogSession() : session.defaultSession).preconnect({ url: o, numSockets: 1 }) }
 
 // chrome's layout: loose bookmarks and "Bookmarks bar" folder on the bar, its subfolders as dropdowns, everything else under Other bookmarks
 function sendBm() {
@@ -59,7 +70,7 @@ const sendExts = () => toBar('exts', ext.list().filter(x => x.on).map(({ id, nam
 function toUrl(s) {
   s = s.trim()
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^(about|data|file|view-source):/i.test(s)) return s
-  if (/^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|\[::1\])(:\d+)?([/?#]|$)/i.test(s)) return 'http://' + s // dev servers and the router are plain http
+  if (/^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|\[::1\])(:\d+)?([/?#]|$)/i.test(s)) return 'http://' + s // dev servers and the router are plain http
   if (!/\s/.test(s) && s.includes('.')) return 'https://' + s
   return 'https://www.google.com/search?q=' + encodeURIComponent(s)
 }
@@ -68,7 +79,8 @@ function shortcut(input) {
   if (input.type !== 'keyDown') return false
   const c = input.control || input.meta, k = input.key.toLowerCase()
   if (c && !input.shift && !input.alt && k === ' ') active()?.q?.open && live(active().q.view) ? active().q.view.webContents.send('quick:shut') : toggleQuick(true) // closing goes through the page so it can fade out
-  else if (c && !input.shift && !input.alt && k === 't') newTab()
+  else if (c && !input.shift && !input.alt && k === 't') newTab(HOME, false, active()?.incog) // same window, so it stays incognito
+  else if (c && input.shift && !input.alt && k === 'n') newIncognito()
   else if (c && k === 'w') closeTab(activeId)
   else if (c && k === 'l') focusOmnibox()
   else if (c && k === 'd') star()
@@ -96,7 +108,7 @@ function zoom(d) {
   sendTabs()
 }
 
-function star() { const t = active(); if (/^https?:/.test(t.url)) { bm.toggle(t.url, t.title, t.favicon); sendTabs(); sendBm() } }
+function star() { const t = active(); if (!t.incog && /^https?:/.test(t.url)) { bm.toggle(t.url, t.title, t.favicon); sendTabs(); sendBm() } }
 
 function focusOmnibox() { bar.webContents.focus(); toBar('focus-omnibox') }
 
@@ -106,27 +118,27 @@ function cycle(d) {
 }
 
 function attach(tab) {
-  const view = tab.view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'tab-preload.js'), backgroundThrottling: true, spellcheck: false, sandbox: true } })
+  const view = tab.view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'tab-preload.js'), backgroundThrottling: true, spellcheck: false, sandbox: true, ...(tab.incog && { partition: INCOG }) } })
   const wc = view.webContents
   const sync = () => { tab.url = wc.getURL() || tab.url; tab.loading = wc.isLoading(); tab.canGoBack = wc.navigationHistory.canGoBack(); tab.canGoForward = wc.navigationHistory.canGoForward(); sendTabs() }
-  wc.on('page-title-updated', (e, t) => { tab.title = t; hist.title(wc.getURL(), t); sync() })
-  wc.on('did-navigate', (e, u) => { hist.visit(u, tab.typed); tab.typed = false })
+  wc.on('page-title-updated', (e, t) => { tab.title = t; !tab.incog && hist.title(wc.getURL(), t); sync() })
+  wc.on('did-navigate', (e, u) => { !tab.incog && hist.visit(u, tab.typed); tab.typed = false })
   wc.on('did-start-navigation', e => { if (e.isMainFrame && !e.isSameDocument) { block.reset(wc.id); tab.favicon = ''; tab.certErr = '' } })
   wc.on('did-fail-load', (e, code, desc, u, main) => { if (main && /^ERR_(CERT|SSL)/.test(desc)) { tab.certErr = desc; sync() } }) // chromium refused the certificate, the page never loaded
-  const check = () => scam && !tab.certErr && !wc.isDestroyed() && ready() && site.scan(wc, wc.getURL(), ask, sendTabs)
+  const check = () => scam && !tab.incog && !tab.certErr && !wc.isDestroyed() && ready() && site.scan(wc, wc.getURL(), ask, sendTabs) // incognito never sends page text to the ai
   wc.on('dom-ready', () => setTimeout(check, 600)) // ads can keep a page loading forever, the text is there by now
   wc.on('did-stop-loading', check)
   wc.on('did-navigate-in-page', (e, u, main) => main && setTimeout(check, 1500)) // youtube and co swap pages without loading, big sites get a verdict per page
-  wc.on('page-favicon-updated', (e, f) => { tab.favicon = f[0]; sync(); bm.icon(wc.getURL(), f[0]) && sendBm(); hist.icon(wc.getURL(), f[0]) })
+  wc.on('page-favicon-updated', (e, f) => { tab.favicon = f[0]; sync(); !tab.incog && bm.icon(wc.getURL(), f[0]) && sendBm(); !tab.incog && hist.icon(wc.getURL(), f[0]) })
   for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page']) wc.on(ev, sync)
   keys(wc)
-  wc.setWindowOpenHandler(({ url }) => { web(url) && newTab(url); return { action: 'deny' } })
+  wc.setWindowOpenHandler(({ url }) => { isWebUrl(url) && newTab(url, false, tab.incog); return { action: 'deny' } }) // a link from an incognito tab stays incognito
   wc.on('input-event', (e, i) => tab === active() && heat(i.type === 'mouseMove' ? 100 : 700))
   wc.on('context-menu', (e, p) => menu(wc, p))
   wc.on('console-message', e => e.message === '__qat:stop' && ai.stop(true)) // the stop pill the agent overlay puts on the page
-  crx.addTab(wc, win)
+  if (!tab.incog) crx.addTab(wc, win) // extensions throw if handed a tab from a different session
   for (const ev of ['did-stop-loading', 'did-navigate-in-page', 'dom-ready']) wc.on(ev, () => tab === active() && heat(1500))
-  wc.on('update-target-url', (e, u) => warm(u)) // hovering a link, it usually gets clicked
+  wc.on('update-target-url', (e, u) => warm(u, tab.incog)) // hovering a link, it usually gets clicked
   const h = tab.hist
   tab.hist = null
   boot.then(() => !wc.isDestroyed() && (h ? wc.navigationHistory.restore(h) : wc.loadURL(tab.url)).catch(() => {}))
@@ -146,7 +158,8 @@ function push(image) {
 // only the 52px strip gets read back, 30fps while the user scrolls or types, 2fps otherwise. uncapped it ate the main thread
 function snap() {
   const wc = active()?.view?.webContents
-  if (busy || snapT || !wc || win.isMinimized() || !win.isVisible()) return
+  if (!wc || wc.isDestroyed() || !win || win.isDestroyed() || win.isMinimized() || !win.isVisible()) return
+  if (busy || snapT) return
   const wait = snapAt + 33 - Date.now()
   if (wait > 0) { snapT = setTimeout(() => { snapT = 0; snap() }, wait); return }
   busy = true
@@ -159,7 +172,7 @@ const heat = ms => { hot = Math.max(hot, Date.now() + ms); snap(); sideSnap() }
 let sideAt = 0, sideBusy = false
 function sideSnap() {
   const wc = active()?.view?.webContents
-  if (!sidebarOpen || !side || sideBusy || !wc || win.isMinimized() || Date.now() - sideAt < 700) return
+  if (!sidebarOpen || !side || sideBusy || !wc || wc.isDestroyed() || !win || win.isDestroyed() || win.isMinimized() || Date.now() - sideAt < 700) return
   sideBusy = true
   sideAt = Date.now()
   const h = win.getContentBounds().height - STRIP, x = Math.round(pw / 2)
@@ -252,11 +265,11 @@ function layout() {
 }
 
 function menu(wc, p) { // chrome's right click basics plus whatever extensions added
-  const h = wc.navigationHistory, t = []
-  if (p.linkURL) t.push({ label: 'Open link in new tab', click: () => newTab(p.linkURL) }, { label: 'Copy link address', click: () => clipboard.writeText(p.linkURL) }, { type: 'separator' })
-  if (p.mediaType === 'image') t.push({ label: 'Open image in new tab', click: () => newTab(p.srcURL) }, { label: 'Copy image', click: () => wc.copyImageAt(p.x, p.y) }, { type: 'separator' })
+  const h = wc.navigationHistory, t = [], tab = tabOf(wc), incog = !!tab?.incog // links opened from an incognito page must stay incognito, or they land in history
+  if (p.linkURL) t.push({ label: 'Open link in new tab', click: () => newTab(p.linkURL, false, incog) }, { label: 'Copy link address', click: () => clipboard.writeText(p.linkURL) }, { type: 'separator' })
+  if (p.mediaType === 'image') t.push({ label: 'Open image in new tab', click: () => newTab(p.srcURL, false, incog) }, { label: 'Copy image', click: () => wc.copyImageAt(p.x, p.y) }, { type: 'separator' })
   if (p.isEditable) t.push({ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' })
-  else if (p.selectionText) t.push({ role: 'copy' }, { label: 'Search Google for "' + p.selectionText.trim().slice(0, 30) + '"', click: () => newTab(toUrl(p.selectionText)) })
+  else if (p.selectionText) t.push({ role: 'copy' }, { label: 'Search Google for "' + p.selectionText.trim().slice(0, 30) + '"', click: () => newTab(toUrl(p.selectionText), false, incog) })
   else t.push({ label: 'Back', enabled: h.canGoBack(), click: () => h.goBack() }, { label: 'Forward', enabled: h.canGoForward(), click: () => h.goForward() }, { label: 'Reload', click: () => wc.reload() })
   const x = crx.getContextMenuItems(wc, p)
   if (x.length) t.push({ type: 'separator' }, ...x)
@@ -264,14 +277,18 @@ function menu(wc, p) { // chrome's right click basics plus whatever extensions a
   Menu.buildFromTemplate(t).popup()
 }
 
-function newTab(url = HOME, bg) {
-  const tab = { id: nextId++, title: 'New Tab', url, favicon: '', loading: true, canGoBack: false, canGoForward: false, sleeping: false, lastActive: Date.now() }
+function newTab(url = HOME, bg, incog) {
+  const tab = { id: nextId++, title: incog ? 'New Incognito Tab' : 'New Tab', url, favicon: '', loading: true, canGoBack: false, canGoForward: false, sleeping: false, incog: !!incog, lastActive: Date.now() }
   tabs.set(tab.id, tab)
   quiet = bg // the extensions lib selects every tab it's handed, a background one shouldn't steal the window
   attach(tab)
   quiet = false
-  if (bg) { crx.selectTab(active().view.webContents); sendTabs() } else activate(tab.id)
+  if (bg) { const a = active(); a && !a.incog && a.view && crx.selectTab(a.view.webContents); sendTabs() } else activate(tab.id)
   return tab
+}
+
+function newIncognito(url = HOME) {
+  return newTab(url, false, true)
 }
 
 function activate(id) {
@@ -279,7 +296,7 @@ function activate(id) {
   const prev = active()
   if (prev && prev !== tabs.get(id)) {
     if (live(prev.q?.view)) win.contentView.removeChildView(prev.q.view)
-    if (prev.view) { prev.q?.run ? win.contentView.addChildView(prev.view, 0) : win.contentView.removeChildView(prev.view); prev.lastActive = Date.now(); setTimeout(() => purge(prev), 30000) }
+    if (prev.view) { prev.q?.run ? win.contentView.addChildView(prev.view, 0) : win.contentView.removeChildView(prev.view); prev.lastActive = Date.now(); const t = setTimeout(() => { purgeTimers.delete(t); purge(prev) }, 30000); purgeTimers.add(t) }
   }
   activeId = id
   const tab = active()
@@ -291,7 +308,7 @@ function activate(id) {
   heat(1000)
   tab.view.webContents.focus()
   if (tab.q?.open && live(tab.q.view) && !tab.q.view.webContents.isLoading()) showQuick(tab)
-  crx.selectTab(tab.view.webContents)
+  !tab.incog && crx.selectTab(tab.view.webContents)
   sendTabs()
 }
 
@@ -350,27 +367,32 @@ function createWindow() {
   win.on('closed', () => { // timers and messages already in flight from the bar touched the dead window and threw 'Object has been destroyed'
     timers.forEach(clearInterval)
     clearTimeout(countTimer)
-    ipcMain.removeAllListeners()
-    app.quit()
+    clearTimeout(snapT)
+    snapT = 0
   })
-  newTab()
+  newTab(HOME, false, wantIncog) // wantIncog is set when the taskbar jump list launched an incognito window
+  wantIncog = false
 }
 
-ipcMain.on('tab:new', (e, url) => newTab(url))
+ipcMain.on('tab:new', (e, url) => newTab(url, false, ctxTab(e)?.incog)) // a new tab inherits the incognito-ness of the page that asked for it
+ipcMain.on('tab:incog', () => newIncognito())
 ipcMain.on('tab:close', (e, id) => closeTab(id))
 ipcMain.on('tab:activate', (e, id) => activate(id))
 ipcMain.on('nav:go', (e, text) => { active().typed = true; active().view.webContents.loadURL(toUrl(text)).catch(() => {}) })
 ipcMain.on('bar:height', (e, h) => { barH = Math.max(STRIP, Math.min(h, win.getContentBounds().height)); layout() })
-ipcMain.on('shield:toggle', () => { const t = active(); block.toggle(t.url); block.reset(t.view.webContents.id); t.view.webContents.reload(); sendTabs() })
+ipcMain.on('shield:toggle', () => { const t = active(); if (t.incog) return; block.toggle(t.url); block.reset(t.view.webContents.id); t.view.webContents.reload(); sendTabs() })
 const qatPage = e => !!e.senderFrame?.url.startsWith('qat://')
 ipcMain.handle('block:get', e => qatPage(e) ? block.deep() : undefined)
 ipcMain.handle('block:set', (e, v) => qatPage(e) ? block.setDeep(v) : undefined)
 ipcMain.handle('omni:match', (e, q) => {
-  const m = hist.match(q), b = bm.match(q).map(x => ({ url: x.url, title: x.title, star: true }))
+  // chrome does not autocomplete from your normal history in an incognito window, and neither do we
+  const incog = !!ctxTab(e)?.incog
+  const m = incog ? { inline: '', items: [] } : hist.match(q)
+  const b = bm.match(q).map(x => ({ url: x.url, title: x.title, star: true }))
   const strip = u => u.replace(/^https?:\/\/(www\.)?/, '')
   if (!m.inline) m.inline = b.map(x => strip(x.url)).find(u => u.startsWith(q.trim().toLowerCase())) || ''
   m.items = [...b, ...m.items.filter(i => !b.some(x => x.url === i.url))].slice(0, 6)
-  warm(m.inline ? toUrl(m.inline) : m.items[0]?.url || HOME) // no match means it's probably a search
+  warm(m.inline ? toUrl(m.inline) : m.items[0]?.url || HOME, ctxTab(e)?.incog) // no match means it's probably a search
   return m
 })
 ipcMain.on('star:toggle', star)
@@ -384,9 +406,9 @@ qh('bm:remove', (u, f) => { bm.remove(u, f); sendTabs(); sendBm() })
 qh('bm:import', d => { const n = bm.add(chrome.bookmarks(d)); sendTabs(); sendBm(); return n })
 qh('scam:get', () => scam)
 qh('scam:set', v => { scam = !!v; conf('scamCheck', scam); sendTabs(); return scam })
-ipcMain.handle('site:info', async e => { const t = active(); return e.sender === bar.webContents && t.view ? { ...await site.info(t.view.webContents, t.url, t.certErr), scam, ai: ready() } : null })
-ipcMain.on('site:view', (e, host) => e.sender === bar.webContents && site.view(host))
-ipcMain.on('site:rescan', e => { const wc = active()?.view?.webContents; if (e.sender !== bar.webContents || !wc) return; site.forget(wc.getURL()); scam && ready() && site.scan(wc, wc.getURL(), ask, sendTabs) })
+ipcMain.handle('site:info', async e => { const t = active(); return e.sender === bar.webContents && t.view ? { ...await site.info(t.view.webContents, t.url, t.certErr), scam, ai: ready(), incog: !!t.incog } : null })
+ipcMain.on('site:view', (e, host) => e.sender === bar.webContents && !active()?.incog && site.view(host)) // never write an incognito host to disk
+ipcMain.on('site:rescan', e => { const wc = active()?.view?.webContents; if (e.sender !== bar.webContents || !wc || active().incog) return; site.forget(wc.getURL()); scam && ready() && site.scan(wc, wc.getURL(), ask, sendTabs) })
 qh('ext:list', () => ext.list())
 const then = f => async (...a) => { const r = await f(...a); sendExts(); return r }
 qh('ext:toggle', then(id => ext.toggle(id)))
@@ -395,15 +417,16 @@ qh('ext:import', then(d => ext.import(chrome.extensions(d))))
 qh('ext:load', then(async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Pick an unpacked extension folder' }); return r.canceled ? null : ext.add(r.filePaths[0]) }))
 const fromBar = f => (e, ...a) => e.sender === bar.webContents && f(...a)
 let shutAt = 0, shutId // clicking the icon of an open popup blurs it shut first, that click shouldn't reopen it
-ipcMain.on('ext:popup', fromBar((id, r) => (id !== shutId || Date.now() - shutAt > 300) && crx.api.browserAction.activateClick({ extensionId: id, tabId: active().view?.webContents.id ?? -1, anchorRect: r })))
+ipcMain.on('ext:popup', fromBar((id, r) => { const t = active(); if (t?.incog) return; return (id !== shutId || Date.now() - shutAt > 300) && crx.api.browserAction.activateClick({ extensionId: id, tabId: t?.view?.webContents.id ?? -1, anchorRect: r }) }))
 ipcMain.on('ext:pin', fromBar(id => { ext.pin(id); sendExts() }))
 ipcMain.on('bar:strip', fromBar(h => { STRIP = h; layout(); heat(500) }))
-qh('ext:open', u => /^chrome-extension:\/\//.test(u) && newTab(u))
+qh('ext:open', u => /^chrome-extension:\/\//.test(u) && newTab(u)) // extensions only exist in the default session, so this must never be an incognito tab
 qh('app:reset', async () => { // wipes everything qat ever saved, then starts fresh
   const s = session.defaultSession, ud = app.getPath('userData')
   for (const x of s.extensions.getAllExtensions()) s.extensions.removeExtension(x.id)
   await s.clearStorageData()
   await s.clearCache()
+  try { await incogSession().clearStorageData(); await incogSession().clearCache() } catch {} // in-memory, but clear anyway so nothing survives a reset
   for (const f of ['settings.json', 'allow.json', 'history.json', 'bookmarks.json', 'extensions.json', 'adblock.bin', 'adblock-deep.bin', 'adblock-deep2.bin', 'safety.json', 'extensions']) fs.rmSync(path.join(ud, f), { recursive: true, force: true })
   app.relaunch()
   app.exit(0)
@@ -432,7 +455,7 @@ function toggleSide() {
 }
 ipcMain.on('mem:sleep-all', () => sleepTabs(true))
 ipcMain.on('menu', (e, a) => ({
-  new: () => newTab(), settings: () => newTab('qat://settings'), bookmarks: () => newTab('qat://bookmarks'), history: () => newTab('qat://history'), bmbar: () => { conf('bookmarksBar', conf('bookmarksBar') === false); sendBm() }, extensions: () => newTab('qat://extensions'), sleep: () => sleepTabs(true), dev: () => active().view?.webContents.toggleDevTools(),
+  new: () => newTab(HOME, false, active()?.incog), incog: () => newIncognito(), settings: () => newTab('qat://settings'), bookmarks: () => newTab('qat://bookmarks'), history: () => newTab('qat://history'), bmbar: () => { conf('bookmarksBar', conf('bookmarksBar') === false); sendBm() }, extensions: () => newTab('qat://extensions'), sleep: () => sleepTabs(true), dev: () => active().view?.webContents.toggleDevTools(),
   zin: () => zoom(1), zout: () => zoom(-1), full: () => win.setFullScreen(!win.isFullScreen()),
 })[a]?.())
 ipcMain.on('win:min', () => win.minimize())
@@ -445,7 +468,7 @@ const quickTabs = s => { // what a quick ask's agent sees: the tab it was opened
   return own() && {
     wc: () => own()?.view?.webContents,
     list: () => [...tabs.values()].map(t => ({ title: t.title, url: t.url, active: t === own() })),
-    open: u => { u = toUrl(u); if (!web(u)) throw new Error('Only web pages can be opened'); const o = own(); moveQuick(o, newTab(u, o !== active())) },
+    open: u => { u = toUrl(u); if (!isWebUrl(u)) throw new Error('Only web pages can be opened'); const o = own(); moveQuick(o, newTab(u, o !== active(), o?.incog)) },
     switchTo: i => { const t = [...tabs.values()][i]; if (!t) throw new Error('No tab ' + i); moveQuick(own(), t) },
     close: i => { const t = [...tabs.values()][i]; if (!t) throw new Error('No tab ' + i); closeTab(t.id) },
   }
@@ -454,7 +477,7 @@ const ai = require('./ai').setup(ipcMain, () => [side?.webContents, ...[...tabs.
   bind: quickTabs,
   wc: () => active()?.view?.webContents,
   list: () => [...tabs.values()].map(t => ({ title: t.title, url: t.url, active: t.id === activeId })),
-  open: u => { u = toUrl(u); if (!web(u)) throw new Error('Only web pages can be opened'); newTab(u) },
+  open: u => { u = toUrl(u); if (!isWebUrl(u)) throw new Error('Only web pages can be opened'); newTab(u, false, active()?.incog) },
   switchTo: i => { const t = [...tabs.values()][i]; if (!t) throw new Error('No tab ' + i); activate(t.id) },
   close: i => { const t = [...tabs.values()][i]; if (!t) throw new Error('No tab ' + i); closeTab(t.id) },
 })
@@ -469,6 +492,17 @@ function qatFile(req) {
 }
 
 app.whenReady().then(async () => {
+  if (!solo) return // another copy owns the window; app.quit() is already on its way
+  // the taskbar's right-click menu: "New Incognito window" re-launches us with --incognito
+  if (process.platform === 'win32') try { app.setUserTasks([{ program: process.execPath, arguments: INCOG_ARG, iconPath: process.execPath, iconIndex: 0, title: 'New Incognito window', description: 'Open Qat in incognito mode (Ctrl+Shift+N)' }]) } catch (e) { console.warn('jump list: ' + e.message) }
+  // a second launch from that jump list item hands its args to the window we already have
+  app.on('second-instance', (e, argv) => {
+    const incog = !!argv?.includes(INCOG_ARG)
+    if (!win || win.isDestroyed()) { wantIncog ||= incog; return } // still starting up, so createWindow will open it
+    if (win.isMinimized()) win.restore()
+    win.focus()
+    if (incog) newIncognito()
+  })
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*', 'https://accounts.youtube.com/*'] }, (d, cb) => cb({ requestHeaders: { ...d.requestHeaders, 'User-Agent': NATIVE } })) // google's sign in turns away chromium posing as chrome, electron saying it's electron gets through. header only, switching the tab's own agent mid load makes chromium reload the page
   protocol.handle('qat', req => { const f = qatFile(req); return f ? net.fetch(pathToFileURL(f).toString()) : new Response('Not found', { status: 404 }) })
   crx = new ElectronChromeExtensions({ // fills in the chrome.* apis electron lacks: tabs, windows, webNavigation, contextMenus, action popups
@@ -478,9 +512,20 @@ app.whenReady().then(async () => {
     createWindow: d => { newTab([d.url].flat()[0] || HOME); return win },
   })
   crx.on('browser-action-popup-created', p => p.browserWindow.once('closed', () => { shutAt = Date.now(); shutId = p.extensionId }))
-  block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   createWindow()
-  timers = [setInterval(() => sleepTabs(false), 60000), setInterval(meter, 5000), setInterval(snap, 500), setInterval(() => { sideSnap(); quickSnap() }, 1500)]
+  block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
 })
-app.on('window-all-closed', () => app.quit())
+app.on('before-quit', () => {
+  timers.forEach(clearInterval)
+  clearTimeout(countTimer)
+  clearTimeout(snapT)
+  snapT = 0
+  purgeTimers.forEach(clearTimeout)
+  purgeTimers.clear()
+  warmed.clear()
+  ai?.stop?.(true) // stop any running AI runs
+  site.flush()
+  web.flush()
+  for (const tab of tabs.values()) if (tab.q?.free) clearTimeout(tab.q.free)
+})
 app.on('will-quit', hist.flush)

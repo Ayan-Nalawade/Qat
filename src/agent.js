@@ -212,7 +212,7 @@ function tools(b, signal, quick) {
     click,
     type: async ({ text, ref, clear, enter }) => {
       if (ref != null) await click({ ref }, 'Typing')
-      if (clear) { press('Control+A'); press('Backspace') }
+      if (clear) { press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A'); press('Backspace') }
       wc().insertText(text)
       if (enter) { press('Enter'); await settle() }
       return 'Typed ' + JSON.stringify(text.slice(0, 60)) + (enter ? ' and pressed Enter.' : '.') + where()

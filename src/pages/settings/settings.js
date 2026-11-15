@@ -43,6 +43,7 @@ qat.ai.settings().then(s => {
   sel.value = cfg.provider
   sel.onchange = async () => { cfg = await qat.ai.pick({ provider: sel.value, model: cfg.providers[sel.value].model }) }
   $('#cards').append(...Object.keys(cfg.providers).map(card))
+  if (location.hash === '#ai') $('#active').closest('.box').scrollIntoView({ block: 'start' }) // the assistant's gear links here as qat://settings#ai
 })
 
 const deep = $('#deep'), dn = $('#deep-note')

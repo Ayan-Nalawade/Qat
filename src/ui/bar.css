@@ -59,6 +59,13 @@ body[data-tone="light"], .lg[data-tone="light"] { --fg: #0e1014; --dim: rgba(14,
 .tab:hover .x, .tab.active .x { opacity: .85; }
 .tab .x:hover { background: var(--hov); opacity: 1; }
 .tab .x svg { width: 12px; height: 12px; }
+.tab.incog .title { font-style: italic; }
+.tab .incog { width: 16px; height: 16px; flex: none; opacity: .85; }
+/* incognito only darkens the toolbar when the page behind it is dark too, otherwise white text landed on a light bar */
+body.incog[data-tone="dark"] { --fg: #e8ecf5; }
+body.incog[data-tone="dark"] #strip, body.incog[data-tone="dark"] #bmbar { background: rgba(70, 78, 96, .5); } /* reads as a darker strip, like chrome's */
+body.incog[data-tone="dark"] #omni { background: rgba(20, 22, 28, .55); }
+body.incog #star, body.incog #shield { display: none; } /* they do nothing here, the page is never written to disk */
 
 #nav { display: flex; align-items: center; gap: 2px; -webkit-app-region: no-drag; }
 .sep { width: 1px; height: 16px; margin: 0 4px; background: var(--dim); opacity: .35; }

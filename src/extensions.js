@@ -39,18 +39,22 @@ module.exports = {
   add,
   async toggle(id) {
     const e = list.find(x => x.id === id)
+    if (!e) return
     e.on = !e.on
-    e.on ? await load(e.path).catch(err => { e.error = err.message }) : ext().removeExtension(id)
+    // a broken extension is not loaded in the session, and removeExtension throws for it, so only remove what is there
+    if (e.on) await load(e.path).then(() => { e.error = '' }, err => { e.error = err.message })
+    else if (ext().getExtension(id)) ext().removeExtension(id)
     save()
   },
   pin(id) { // the toolbar holds 4, the rest live behind the puzzle button
     const e = list.find(x => x.id === id)
+    if (!e) return
     if (e.pin || list.filter(x => x.pin).length < 4) { e.pin = !e.pin; save() }
   },
   remove(id) {
     const e = list.find(x => x.id === id)
     if (ext().getExtension(id)) ext().removeExtension(id)
-    if (e.path.startsWith(dir() + path.sep)) fs.rmSync(e.path, { recursive: true, force: true })
+    if (e?.path.startsWith(dir() + path.sep)) fs.rmSync(e.path, { recursive: true, force: true })
     list = list.filter(x => x !== e)
     save()
   },

@@ -61,4 +61,4 @@ async function read(url, offset, signal) {
   return `${w.getTitle()} (${w.getURL()})\nchars ${offset}-${Math.min(text.length, offset + 12000)} of ${text.length}:\n` + text.slice(offset, offset + 12000)
 }
 
-module.exports = { search, read, close }
+module.exports = { search, read, close, flush: () => { clearTimeout(idle); close() } }

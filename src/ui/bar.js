@@ -4,13 +4,14 @@ const MAX = 32
 let BH = 88
 let state = { tabs: [], activeId: null }
 const X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+const HAT = '<svg class="incog" viewBox="0 0 24 24"><path d="M3.5 11.5 9 9l2.2-3.2h1.6L15 9l5.5 2.5-1.2 3.1c-.6 1.5-2 2.4-3.6 2.4h-7.4c-1.6 0-3-.9-3.6-2.4z"/><circle cx="9.3" cy="13.2" r="1.25"/><circle cx="14.7" cy="13.2" r="1.25"/></svg>'
 
 function tabEl(t) {
   const el = document.createElement('div')
-  el.className = 'tab' + (t.id === state.activeId ? ' lg active' : '') + (t.sleeping ? ' sleeping' : '') + (t.ai ? ' ai' : '')
-  el.title = t.ai ? t.title + ' (Qat is working in this tab)' : t.title
+  el.className = 'tab' + (t.id === state.activeId ? ' lg active' : '') + (t.sleeping ? ' sleeping' : '') + (t.ai ? ' ai' : '') + (t.incog ? ' incog' : '')
+  el.title = t.ai ? t.title + ' (Qat is working in this tab)' : t.incog ? t.title + ' (Incognito)' : t.title
   if (t.id === state.activeId && document.body.dataset.tone) el.dataset.tone = document.body.dataset.tone // new node, keep the tone until the next frame
-  el.innerHTML = (t.loading ? '<i class="spin"></i>' : t.favicon ? '<img class="fav" alt="">' : '<i class="dot"></i>') + '<span class="title"></span><button class="x" title="Close tab">' + X + '</button>'
+  el.innerHTML = (t.loading ? '<i class="spin"></i>' : t.favicon && !t.incog ? '<img class="fav" alt="">' : t.incog ? HAT : '<i class="dot"></i>') + '<span class="title"></span><button class="x" title="Close tab">' + X + '</button>'
   el.querySelector('.title').textContent = t.title
   const img = el.querySelector('img')
   if (img) { img.src = t.favicon; img.onerror = () => img.replaceWith(Object.assign(document.createElement('i'), { className: 'dot' })) }
@@ -26,7 +27,7 @@ function render() {
   // tabs only get rebuilt when they change, this fires a lot while pages load and a full rebuild restarted spinners and refetched favicons
   let moved = false
   state.tabs.forEach((t, i) => {
-    const sig = [t.title, t.loading, t.favicon, t.sleeping, t.ai, t.id === state.activeId].join('\n')
+    const sig = [t.title, t.loading, t.favicon, t.sleeping, t.ai, t.incog, t.id === state.activeId].join('\n')
     let el = tabEls.get(t.id)
     if (el?.sig !== sig) { const n = tabEl(t); el?.replaceWith(n); el = n; el.sig = sig; tabEls.set(t.id, el); moved = true }
     if (tabsEl.children[i] !== el) { tabsEl.insertBefore(el, tabsEl.children[i] || null); moved = true }
@@ -37,6 +38,7 @@ function render() {
   $('#reload').classList.toggle('loading', cur.loading)
   $('#loadbar').classList.toggle('on', cur.loading)
   if (document.activeElement !== omni) omni.value = cur.url
+  document.body.classList.toggle('incog', !!cur.incog) // tints the toolbar and hides the star/shield, they do nothing here
   const sh = $('#shield'), web = /^https?:/.test(cur.url)
   sh.classList.toggle('na', !web)
   sh.classList.toggle('off', !cur.shield)

@@ -28,6 +28,6 @@ module.exports = {
   match(q) {
     const words = q.trim().toLowerCase().split(/\s+/)
     return list.filter(b => { const hay = (strip(b.url) + ' ' + b.title).toLowerCase(); return words.every(w => hay.includes(w)) })
-      .sort((a, b) => strip(b.url).startsWith(words[0]) - strip(a.url).startsWith(words[0])).slice(0, 3)
+      .sort((a, b) => strip(b.url).toLowerCase().startsWith(words[0]) - strip(a.url).toLowerCase().startsWith(words[0])).slice(0, 3)
   },
 }

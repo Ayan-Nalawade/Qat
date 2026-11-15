@@ -17,7 +17,7 @@ const save = () => { clearTimeout(saveT); saveT = setTimeout(() => put(file(), J
 // big sites still get checked, the model just gets told the domain itself is real. their user content hosts are where phishing pages live
 const KNOWN = new Set('google.com youtube.com wikipedia.org reddit.com github.com microsoft.com live.com office.com apple.com icloud.com amazon.com netflix.com x.com twitter.com instagram.com facebook.com whatsapp.com linkedin.com stackoverflow.com bing.com duckduckgo.com openai.com chatgpt.com anthropic.com claude.ai spotify.com twitch.tv discord.com paypal.com yahoo.com'.split(' '))
 const UGC = /^(sites|docs|forms|drive|script|storage|firebasestorage|gist|raw)\./
-const local = h => /^(localhost|127\.|10\.|192\.168\.|\[::1\]|.*\.(localhost|test|local)$)/.test(h)
+const local = h => /^(localhost|127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|\[::1\]|.*\.(localhost|test|local)$)/.test(h)
 const known = h => KNOWN.has(getDomain(h, { allowPrivateDomains: true }) || h) && !UGC.test(h)
 
 const hostOf = u => { try { return new URL(u).hostname } catch { return '' } }
@@ -114,5 +114,4 @@ async function scan(wc, url, ask, done) {
   pending.set(k, p)
   done()
 }
-
-module.exports = { info, view, risk, scan, sec, forget }
+module.exports = { info, view, risk, scan, sec, forget, flush: () => { clearTimeout(saveT) } }
