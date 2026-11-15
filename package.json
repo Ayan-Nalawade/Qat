@@ -4,16 +4,57 @@
   "description": "a lightweight chromium browser with a glass ui and ai chat",
   "main": "src/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win"
   },
   "author": "Ayan",
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
-    "electron": "github:castlabs/electron-releases#v45.2.1+wvcus"
+    "electron": "github:castlabs/electron-releases#v45.2.1+wvcus",
+    "electron-builder": "^26.18.0"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.20.3",
     "electron-chrome-extensions": "^4.10.0",
     "pdfjs-dist": "^6.5.438"
+  },
+  "productName": "Qat",
+  "build": {
+    "appId": "qat.browser",
+    "productName": "Qat",
+    "electronVersion": "45.2.1",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "src/ui/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Qat-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "Qat-${version}-portable.exe"
+    }
   }
 }

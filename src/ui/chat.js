@@ -171,8 +171,8 @@ function send() {
   if (m) {
     const c = CMDS.find(c => c[0] === m[1].toLowerCase())
     input.value = ''; grow(); menu()
-    if (c && c[2]((m[2] || '').trim()) === false) { input.value = t; grow() }
-    else { err = 'There is no /' + m[1] + ' command. Type / to see them all.'; draw() }
+    if (!c) { err = 'There is no /' + m[1] + ' command. Type / to see them all.'; draw() }
+    else { err = ''; if (c[2]((m[2] || '').trim()) === false) { input.value = t; grow() } }
     return
   }
   ask(t, files)

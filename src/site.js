@@ -32,15 +32,18 @@ function handshake(host, port) {
   return new Promise((ok, no) => {
     const t = performance.now()
     const s = tls.connect({ host, port, servername: host, ALPNProtocols: ['h2', 'http/1.1'], rejectUnauthorized: false, timeout: 8000 }, () => {
-      const ms = Math.round(performance.now() - t), c = s.getPeerX509Certificate(), chain = []
-      for (let x = s.getPeerCertificate(true), n = 0; x?.subject && n < 6; x = x.issuerCertificate === x ? null : x.issuerCertificate, n++) chain.push(x.subject.CN || x.subject.O)
-      const k = c.publicKey.asymmetricKeyDetails, cn = s => s.match(/CN=([^\n]+)/)?.[1] || s.match(/O=([^\n]+)/)?.[1] || s.split('\n')[0]
-      raw.set(host, c.raw)
-      ok({
-        cert: { subject: cn(c.subject), org: c.subject.match(/O=([^\n]+)/)?.[1] || '', issuer: cn(c.issuer), issuerOrg: c.issuer.match(/O=([^\n]+)/)?.[1] || '', from: c.validFromDate.getTime(), to: c.validToDate.getTime(), serial: c.serialNumber, sha256: c.fingerprint256, names: (c.subjectAltName || '').split(', ').length, key: c.publicKey.asymmetricKeyType.toUpperCase() + (k.modulusLength ? ' ' + k.modulusLength + ' bit' : k.namedCurve ? ' ' + k.namedCurve : ''), sig: c.signatureAlgorithm, chain },
-        tls: { version: s.getProtocol(), cipher: s.getCipher().standardName, group: s.getEphemeralKeyInfo()?.name || '', alpn: s.alpnProtocol || 'http/1.1', ip: s.remoteAddress, ms },
-      })
-      s.end()
+      try { // an unparsable cert throws here, which would otherwise kill the main process
+        const ms = Math.round(performance.now() - t), chain = []
+        // getPeerCertificate(true) must run before getPeerX509Certificate(), else the chain comes back empty
+        for (let x = s.getPeerCertificate(true), n = 0; x?.subject && n < 6; x = x.issuerCertificate === x ? null : x.issuerCertificate, n++) chain.push(x.subject.CN || x.subject.O)
+        const c = s.getPeerX509Certificate()
+        const k = c.publicKey.asymmetricKeyDetails || {}, cn = s => s.match(/CN=([^\n]+)/)?.[1] || s.match(/O=([^\n]+)/)?.[1] || s.split('\n')[0]
+        raw.set(host, c.raw)
+        ok({
+          cert: { subject: cn(c.subject), org: c.subject.match(/O=([^\n]+)/)?.[1] || '', issuer: cn(c.issuer), issuerOrg: c.issuer.match(/O=([^\n]+)/)?.[1] || '', from: c.validFromDate?.getTime() ?? null, to: c.validToDate?.getTime() ?? null, serial: c.serialNumber, sha256: c.fingerprint256, names: (c.subjectAltName || '').split(', ').length, key: (c.publicKey.asymmetricKeyType || 'unknown').toUpperCase() + (k.modulusLength ? ' ' + k.modulusLength + ' bit' : k.namedCurve ? ' ' + k.namedCurve : ''), sig: c.signatureAlgorithm, chain },
+          tls: { version: s.getProtocol(), cipher: s.getCipher().standardName, group: s.getEphemeralKeyInfo()?.name || '', alpn: s.alpnProtocol || 'http/1.1', ip: s.remoteAddress, ms },
+        })
+      } catch (e) { no(e) } finally { s.end() }
     })
     s.once('error', no).once('timeout', () => { s.destroy(); no(new Error('Timed out')) })
   })
