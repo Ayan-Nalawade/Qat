@@ -11,13 +11,13 @@
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "electron": "github:castlabs/electron-releases#v45.2.1+wvcus",
-    "electron-builder": "^26.18.0",
-    "electron-updater": "^6.3.9",
-    "electron-log": "^5.2.0"
+    "electron-builder": "^26.18.0"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.20.3",
     "electron-chrome-extensions": "^4.10.0",
+    "electron-log": "^5.2.0",
+    "electron-updater": "^6.3.9",
     "pdfjs-dist": "^6.5.438"
   },
   "productName": "Qat",

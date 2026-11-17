@@ -1,21 +1,25 @@
 const { app, components, BaseWindow, WebContentsView, ipcMain, protocol, net, screen, dialog, session, Menu, clipboard } = require('electron')
 const { ElectronChromeExtensions } = require('electron-chrome-extensions')
-const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { pathToFileURL } = require('url')
 const put = require('./put'), block = require('./block'), site = require('./site'), { ask, ready } = require('./ai'), hist = require('./history'), bm = require('./bookmarks'), ext = require('./extensions'), chrome = require('./chrome'), web = require('./web')
 const toBar = (ch, ...a) => bar && bar.webContents && bar.webContents.send(ch, ...a)
->
 protocol.registerSchemesAsPrivileged([{ scheme: 'qat', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 
-// Auto-updater configuration
-autoUpdater.logger = require('electron-log')
-autoUpdater.logger.transports.file.level = 'info'
-autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = true
+// the auto-updater and its logger are optional: a missing module must never stop the browser from booting
+let autoUpdater = null, log
+try {
+  log = require('electron-log')
+  log.transports.file.level = 'info'
+  autoUpdater = require('electron-updater').autoUpdater
+  autoUpdater.logger = log
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+} catch (e) { console.error('[updater] unavailable: ' + e.message) }
 
+if (autoUpdater) {
 autoUpdater.on('checking-for-update', () => console.log('[updater] Checking for update...'))
 autoUpdater.on('update-available', info => {
   console.log('[updater] Update available:', info.version)
@@ -28,6 +32,7 @@ autoUpdater.on('update-downloaded', info => {
   console.log('[updater] Update downloaded:', info.version)
   toBar('updater:downloaded', { version: info.version, releaseNotes: info.releaseNotes })
 })
+}
 app.commandLine.appendSwitch('process-per-site')
 app.commandLine.appendSwitch('renderer-process-limit', '6')
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,BackForwardCache') // site isolation stays on, captchas like cloudflare's fail when their frame shares the page's process
@@ -454,7 +459,9 @@ qh('app:reset', async () => { // wipes everything qat ever saved, then starts fr
   app.relaunch()
   app.exit(0)
 })
+const updErr = () => ({ error: 'Auto-update is unavailable in this build' })
 ipcMain.handle('updater:check', async () => {
+  if (!autoUpdater) return updErr()
   try {
     const result = await autoUpdater.checkForUpdates()
     return { available: !!result?.updateInfo }
@@ -465,6 +472,7 @@ ipcMain.handle('updater:check', async () => {
 })
 
 ipcMain.handle('updater:download', async () => {
+  if (!autoUpdater) return updErr()
   try {
     await autoUpdater.downloadUpdate()
     return { success: true }
@@ -474,9 +482,7 @@ ipcMain.handle('updater:download', async () => {
   }
 })
 
-ipcMain.handle('updater:install', () => {
-  autoUpdater.quitAndInstall()
-})
+ipcMain.handle('updater:install', () => autoUpdater ? autoUpdater.quitAndInstall() : undefined)
 ipcMain.handle('omni:search', (e, q) => fetch('https://suggestqueries.google.com/complete/search?client=chrome&q=' + encodeURIComponent(q), { signal: AbortSignal.timeout(1500) }).then(r => r.json()).then(j => j[1].slice(0, 5)).catch(() => []))
 ipcMain.on('nav:back', () => active().view.webContents.navigationHistory.goBack())
 ipcMain.on('nav:forward', () => active().view.webContents.navigationHistory.goForward())
@@ -562,7 +568,7 @@ app.whenReady().then(async () => {
   block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   
   // Check for updates after window is created
-  autoUpdater.checkForUpdates()
+  if (autoUpdater) autoUpdater.checkForUpdates()
 })
 app.on('before-quit', () => {
   timers.forEach(clearInterval)
