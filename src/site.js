@@ -72,14 +72,9 @@ function view(host) {
   shell.openPath(f)
 }
 
-async function deleteCookies(host) {
+async function deleteCookies(session, host) {
   try {
-    const result = await new Promise(resolve => {
-      wc.session.cookies.removeAll({ domain: host }, (removed) => {
-        resolve(removed)
-      })
-    })
-    return result > 0 ? result : 0
+    return await session.cookies.removeAll({ domain: host })
   } catch (e) {
     console.error('[site] Delete cookies error:', e)
     return 0

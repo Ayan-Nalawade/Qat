@@ -248,7 +248,7 @@ function paintSite() {
     const left = Math.ceil((d.cert.to - Date.now()) / 864e5)
     sitepop.append(srow(CERT, '', 'Certificate', (d.cert.issuerOrg || d.cert.issuer) + (left < 0 ? ', expired' : ', expires ' + day(d.cert.to)), () => qat.site.view(d.host)))
   } else if (d.err) sitepop.append(srow(CERT, '', 'Certificate', "Couldn't read it"))
-    sitepop.append(srow("", "", "Delete cookies for this site", "", () => qat.site.deleteCookies(d.host)))
+    sitepop.append(srow("", "", "Delete cookies for this site", "", () => qat.site.delCookies(d.host)))
   if (d.url && (d.tls || d.page)) {
     const n = mk('details', 'nerd'), t = d.tls || {}, c = d.cert || {}, p = d.page || {}, ms = v => v ? v + ' ms' : null, s = mk('summary')
     s.innerHTML = BARS
