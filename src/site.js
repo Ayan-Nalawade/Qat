@@ -72,6 +72,20 @@ function view(host) {
   shell.openPath(f)
 }
 
+async function deleteCookies(host) {
+  try {
+    const result = await new Promise(resolve => {
+      wc.session.cookies.removeAll({ domain: host }, (removed) => {
+        resolve(removed)
+      })
+    })
+    return result > 0 ? result : 0
+  } catch (e) {
+    console.error('[site] Delete cookies error:', e)
+    return 0
+  }
+}
+
 function risk(url) {
   const h = hostOf(url)
   if (!/^https?:/.test(url) || !h || local(h)) return null
@@ -114,4 +128,4 @@ async function scan(wc, url, ask, done) {
   pending.set(k, p)
   done()
 }
-module.exports = { info, view, risk, scan, sec, forget, flush: () => { clearTimeout(saveT) } }
+module.exports = { info, view, risk, scan, sec, forget, deleteCookies, flush: () => { clearTimeout(saveT) } }

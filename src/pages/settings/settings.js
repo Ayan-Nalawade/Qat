@@ -58,4 +58,18 @@ const scam = $('#scam')
 qat.scam.get().then(v => scam.checked = v)
 scam.onchange = async () => { scam.checked = await qat.scam.set(scam.checked) }
 $('#reset-btn').onclick = () => confirm('Reset Qat? Everything you saved in Qat gets deleted and it restarts.') && qat.reset()
-$('#ver').textContent = 'Chromium ' + (navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '')
+$('#ver').textContent = 'Qat ' + (await qat.ai.settings()).version + ' · Chromium ' + (navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '')
+
+const upd = $('#updater'), updNote = $('#updater-note')
+upd.onclick = async () => {
+  upd.disabled = true
+  updNote.textContent = 'Checking...'
+  const r = await qat.updater.check()
+  if (r.error) { updNote.textContent = r.error; upd.disabled = false; return }
+  if (!r.available) { updNote.textContent = 'You are on the latest version.'; upd.disabled = false; return }
+  updNote.textContent = 'Update available. Downloading...'
+  const d = await qat.updater.download()
+  if (d.error) { updNote.textContent = d.error; upd.disabled = false; return }
+  updNote.textContent = 'Downloaded. Installing...'
+  qat.updater.install()
+}

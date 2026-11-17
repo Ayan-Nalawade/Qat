@@ -24,7 +24,7 @@ function conf(id) {
 function pub() {
   const providers = {}
   for (const id in PROVIDERS) { const c = conf(id); providers[id] = { name: PROVIDERS[id].name, defBase: PROVIDERS[id].base, base: c.base, model: c.model, hasKey: !!c.key } }
-  return { provider: read().provider || 'nvidia', providers }
+  return { provider: read().provider || 'nvidia', providers, version: app.getVersion() }
 }
 
 const headers = (id, c) => ({ 'Content-Type': 'application/json', ...(c.key && { Authorization: 'Bearer ' + c.key }), ...PROVIDERS[id].headers })

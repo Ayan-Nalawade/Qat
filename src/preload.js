@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('qat', {
   ai: { settings: () => ipcRenderer.invoke('ai:settings'), save: o => ipcRenderer.invoke('ai:save', o), models: id => ipcRenderer.invoke('ai:models', id), pick: o => ipcRenderer.invoke('ai:pick', o), chat: (rid, messages, agent, quick) => ipcRenderer.send('ai:chat', { rid, messages, agent, quick }), stop: rid => ipcRenderer.send('ai:stop', rid), pdf: b => ipcRenderer.invoke('ai:pdf', b) },
   site: { info: () => ipcRenderer.invoke('site:info'), view: send('site:view'), rescan: send('site:rescan'), settings: send('menu') },
   quick: { close: send('quick:close'), move: send('quick:move'), run: send('quick:run'), focus: send('quick:focus') },
+  updater: { check: () => ipcRenderer.invoke('updater:check'), download: () => ipcRenderer.invoke('updater:download'), install: () => ipcRenderer.invoke('updater:install') },
   on: (ch, cb) => ipcRenderer.on(ch, (e, ...a) => cb(...a)),
 })

@@ -64,6 +64,17 @@ qat.on('mem', mb => { $('#mem-val').textContent = mb + ' MB' })
 qat.on('side', open => $('#ai-toggle').classList.toggle('on', open))
 qat.on('focus-omnibox', () => { omni.focus(); omni.select() })
 qat.on('maximized', m => { $('#w-max').title = m ? 'Restore' : 'Maximize' })
+qat.on('updater:available', info => {
+  console.log('[updater] Update available:', info.version)
+  // Could show a notification badge or toast here
+})
+qat.on('updater:progress', p => {
+  console.log('[updater] Download progress:', Math.round(p.percent) + '%')
+})
+qat.on('updater:downloaded', info => {
+  console.log('[updater] Update downloaded:', info.version)
+  // Could show a "restart to update" notification
+})
 
 const drop = $('#drop'), looksUrl = s => /^[a-z][a-z0-9+.-]*:\/\//i.test(s) || /^localhost(:\d+)?([/?#]|$)/i.test(s) || (!/\s/.test(s) && s.includes('.'))
 const ICON = { url: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>', star: '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg>', search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>' }
@@ -237,6 +248,7 @@ function paintSite() {
     const left = Math.ceil((d.cert.to - Date.now()) / 864e5)
     sitepop.append(srow(CERT, '', 'Certificate', (d.cert.issuerOrg || d.cert.issuer) + (left < 0 ? ', expired' : ', expires ' + day(d.cert.to)), () => qat.site.view(d.host)))
   } else if (d.err) sitepop.append(srow(CERT, '', 'Certificate', "Couldn't read it"))
+    sitepop.append(srow("", "", "Delete cookies for this site", "", () => qat.site.deleteCookies(d.host)))
   if (d.url && (d.tls || d.page)) {
     const n = mk('details', 'nerd'), t = d.tls || {}, c = d.cert || {}, p = d.page || {}, ms = v => v ? v + ' ms' : null, s = mk('summary')
     s.innerHTML = BARS

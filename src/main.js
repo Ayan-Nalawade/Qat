@@ -1,11 +1,33 @@
 const { app, components, BaseWindow, WebContentsView, ipcMain, protocol, net, screen, dialog, session, Menu, clipboard } = require('electron')
 const { ElectronChromeExtensions } = require('electron-chrome-extensions')
+const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { pathToFileURL } = require('url')
 const put = require('./put'), block = require('./block'), site = require('./site'), { ask, ready } = require('./ai'), hist = require('./history'), bm = require('./bookmarks'), ext = require('./extensions'), chrome = require('./chrome'), web = require('./web')
+const toBar = (ch, ...a) => bar && bar.webContents && bar.webContents.send(ch, ...a)
+>
 protocol.registerSchemesAsPrivileged([{ scheme: 'qat', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
+
+// Auto-updater configuration
+autoUpdater.logger = require('electron-log')
+autoUpdater.logger.transports.file.level = 'info'
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+
+autoUpdater.on('checking-for-update', () => console.log('[updater] Checking for update...'))
+autoUpdater.on('update-available', info => {
+  console.log('[updater] Update available:', info.version)
+  toBar('updater:available', { version: info.version, releaseNotes: info.releaseNotes, releaseDate: info.releaseDate })
+})
+autoUpdater.on('update-not-available', info => console.log('[updater] Up to date:', info.version))
+autoUpdater.on('error', err => console.error('[updater] Error:', err))
+autoUpdater.on('download-progress', p => toBar('updater:progress', { percent: p.percent, transferred: p.transferred, total: p.total }))
+autoUpdater.on('update-downloaded', info => {
+  console.log('[updater] Update downloaded:', info.version)
+  toBar('updater:downloaded', { version: info.version, releaseNotes: info.releaseNotes })
+})
 app.commandLine.appendSwitch('process-per-site')
 app.commandLine.appendSwitch('renderer-process-limit', '6')
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,BackForwardCache') // site isolation stays on, captchas like cloudflare's fail when their frame shares the page's process
@@ -38,7 +60,6 @@ const live = v => v && !v.webContents.isDestroyed()
 const send = (ch, ...a) => live(side) && side.webContents.send(ch, ...a)
 const ui = () => { const v = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } }); v.webContents.on('will-navigate', e => e.preventDefault()); v.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); return v } // these get window.qat, so they never leave their own page
 const keys = wc => wc.on('before-input-event', (e, input) => { if (shortcut(input)) e.preventDefault() })
-const toBar = (ch, ...a) => live(bar) && bar.webContents.send(ch, ...a)
 const sendTabs = () => !win?.isDestroyed() && (send('ai:tab', { title: active()?.title, url: active()?.url, favicon: active()?.favicon, incog: !!active()?.incog }), toBar('tabs', { activeId, tabs: [...tabs.values()].map(({ id, title, url, favicon, loading, canGoBack, canGoForward, sleeping, incog, view, certErr, q }) => ({ id, title, ai: !!q?.run, url, favicon, loading, canGoBack, canGoForward, sleeping, incog: !!incog, sec: site.sec(url, certErr), risk: scam && !incog ? site.risk(url) : null, starred: !incog && bm.has(url), blocked: view ? block.count(view.webContents.id) : 0, shield: !incog && block.enabled(url), zoom: view ? Math.round(view.webContents.getZoomFactor() * 100) : 100 })) }))
 const active = () => tabs.get(activeId)
 const tabOf = wc => [...tabs.values()].find(t => t.view?.webContents === wc)
@@ -432,6 +453,29 @@ qh('app:reset', async () => { // wipes everything qat ever saved, then starts fr
   app.relaunch()
   app.exit(0)
 })
+ipcMain.handle('updater:check', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    return { available: !!result?.updateInfo }
+  } catch (e) {
+    console.error('[updater] Check failed:', e)
+    return { error: e.message }
+  }
+})
+
+ipcMain.handle('updater:download', async () => {
+  try {
+    await autoUpdater.downloadUpdate()
+    return { success: true }
+  } catch (e) {
+    console.error('[updater] Download failed:', e)
+    return { error: e.message }
+  }
+})
+
+ipcMain.handle('updater:install', () => {
+  autoUpdater.quitAndInstall()
+})
 ipcMain.handle('omni:search', (e, q) => fetch('https://suggestqueries.google.com/complete/search?client=chrome&q=' + encodeURIComponent(q), { signal: AbortSignal.timeout(1500) }).then(r => r.json()).then(j => j[1].slice(0, 5)).catch(() => []))
 ipcMain.on('nav:back', () => active().view.webContents.navigationHistory.goBack())
 ipcMain.on('nav:forward', () => active().view.webContents.navigationHistory.goForward())
@@ -515,6 +559,9 @@ app.whenReady().then(async () => {
   crx.on('browser-action-popup-created', p => p.browserWindow.once('closed', () => { shutAt = Date.now(); shutId = p.extensionId }))
   createWindow()
   block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
+  
+  // Check for updates after window is created
+  autoUpdater.checkForUpdates()
 })
 app.on('before-quit', () => {
   timers.forEach(clearInterval)
