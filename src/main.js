@@ -435,7 +435,7 @@ qh('bm:move', (url, folder) => { bm.move(url, folder); sendTabs(); sendBm() })
 qh('scam:get', () => scam)
 ipcMain.handle('site:info', async e => { const t = active(); return e.sender === bar.webContents && t.view ? { ...await site.info(t.view.webContents, t.url, t.certErr), scam, ai: ready(), incog: !!t.incog } : null })
 ipcMain.on('site:view', (e, host) => e.sender === bar.webContents && !active()?.incog && site.view(host)) // never write an incognito host to disk
-ipcMain.on('site:del-cookies', (e, host) => { const t = active(); if (e.sender !== bar.webContents || !t || t.incog) return; site.deleteCookies(t.view.webContents.session, host); sendTabs() })
+ipcMain.handle('site:del-cookies', async (e, host) => { const t = active(); if (e.sender !== bar.webContents || !t || t.incog) return { error: 'no tab' }; return { removed: await site.deleteCookies(t.view.webContents.session, host) } })
 ipcMain.on('site:rescan', e => { const wc = active()?.view?.webContents; if (e.sender !== bar.webContents || !wc || active().incog) return; site.forget(wc.getURL()); scam && ready() && site.scan(wc, wc.getURL(), ask, sendTabs) })
 qh('ext:list', () => ext.list())
 const then = f => async (...a) => { const r = await f(...a); sendExts(); return r }

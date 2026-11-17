@@ -73,12 +73,12 @@ function view(host) {
 }
 
 async function deleteCookies(session, host) {
-  try {
-    return await session.cookies.removeAll({ domain: host })
-  } catch (e) {
-    console.error('[site] Delete cookies error:', e)
-    return 0
-  }
+  // electron's cookies api has no removeAll: fetch this host's cookies, then drop them one by one
+  const url = 'https://' + host + '/'
+  const list = await session.cookies.get({ url }).catch(() => [])
+  let killed = 0
+  for (const c of list) { try { await session.cookies.remove(url, c.name); killed++ } catch (e) { console.error('[site] cookie stuck: ' + c.name + ' ' + e.message) } }
+  return killed
 }
 
 function risk(url) {

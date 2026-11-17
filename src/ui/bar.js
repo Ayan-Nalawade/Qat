@@ -248,7 +248,8 @@ function paintSite() {
     const left = Math.ceil((d.cert.to - Date.now()) / 864e5)
     sitepop.append(srow(CERT, '', 'Certificate', (d.cert.issuerOrg || d.cert.issuer) + (left < 0 ? ', expired' : ', expires ' + day(d.cert.to)), () => qat.site.view(d.host)))
   } else if (d.err) sitepop.append(srow(CERT, '', 'Certificate', "Couldn't read it"))
-    sitepop.append(srow("", "", "Delete cookies for this site", "", () => qat.site.delCookies(d.host)))
+    const delBtn = srow("", "", "Delete cookies for this site", d.cookies ? d.cookies + ' saved' : 'none found', () => { if (!delBtn.disabled) { delBtn.disabled = true; qat.site.delCookies(d.host).then(async r => { const n = r?.removed ?? 0; delBtn.lastChild.replaceChildren(mk('small', '', n ? n + ' deleted, re-login may be needed' : 'none found')); if (n) { siteData = { ...siteData, cookies: 0 }; await new Promise(rs => setTimeout(rs, 900)); paintSite() } else delBtn.disabled = false }) } })
+sitepop.append(delBtn)
   if (d.url && (d.tls || d.page)) {
     const n = mk('details', 'nerd'), t = d.tls || {}, c = d.cert || {}, p = d.page || {}, ms = v => v ? v + ' ms' : null, s = mk('summary')
     s.innerHTML = BARS
