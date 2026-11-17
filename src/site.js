@@ -73,11 +73,16 @@ function view(host) {
 }
 
 async function deleteCookies(session, host) {
-  // electron's cookies api has no removeAll: fetch this host's cookies, then drop them one by one
-  const url = 'https://' + host + '/'
-  const list = await session.cookies.get({ url }).catch(() => [])
+  // electron's cookies api has no removeAll, and get({url}) misses cookies saved at a
+  // deeper path, so pull every cookie and keep only this host's: "ex.com" or ".ex.com".
+  // a cookie on sub.dom.com doesn't reach this host, so it stays.
+  const all = await session.cookies.get({}).catch(() => [])
   let killed = 0
-  for (const c of list) { try { await session.cookies.remove(url, c.name); killed++ } catch (e) { console.error('[site] cookie stuck: ' + c.name + ' ' + e.message) } }
+  for (const c of all) {
+    if (c.domain !== host && c.domain !== '.' + host) continue
+    const url = 'https://' + (c.domain.replace(/^\./, '') || host) + (c.path || '/')
+    try { await session.cookies.remove(url, c.name); killed++ } catch (e) { console.error('[site] cookie stuck: ' + c.name + ' ' + e.message) }
+  }
   return killed
 }
 
