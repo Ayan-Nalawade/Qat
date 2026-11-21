@@ -38,6 +38,7 @@ function card(id) {
 
 qat.ai.settings().then(s => {
   cfg = s
+  $('#ver').textContent = 'Qat ' + s.version + ' · Chromium ' + (navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '')
   const sel = $('#active')
   sel.innerHTML = Object.entries(cfg.providers).map(([id, p]) => '<option value="' + id + '">' + p.name + '</option>').join('')
   sel.value = cfg.provider
@@ -58,7 +59,6 @@ const scam = $('#scam')
 qat.scam.get().then(v => scam.checked = v)
 scam.onchange = async () => { scam.checked = await qat.scam.set(scam.checked) }
 $('#reset-btn').onclick = () => confirm('Reset Qat? Everything you saved in Qat gets deleted and it restarts.') && qat.reset()
-$('#ver').textContent = 'Qat ' + (await qat.ai.settings()).version + ' · Chromium ' + (navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '')
 
 const upd = $('#updater'), updNote = $('#updater-note')
 upd.onclick = async () => {

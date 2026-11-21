@@ -55,7 +55,10 @@ function render() {
   site.classList.toggle('chk', lv === 'checking')
   $('#site-lbl').textContent = lv === 'checking' ? 'Checking website...' : open ? 'Not secure' : ''
   site.title = bad ? 'This site might be a scam. Click for details' : lv === 'suspicious' ? 'This site looks a bit off. Click for details' : 'View site information'
-  if (!sitepop.hidden) siteData?.url && siteData.url !== cur.url ? openPop(null) : paintSite()
+  if (!sitepop.hidden) {
+    if (cur.id !== siteTab || cur.url !== siteUrl) { siteSeq++; openPop(null) }
+    else paintSite()
+  }
   if (moved) watchRects()
 }
 
@@ -228,7 +231,7 @@ const ic = d => '<svg viewBox="0 0 24 24">' + d + '</svg>'
 const LOCK = ic('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>'), OPEN = ic('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 7.6-1.7"/>'), INFO = ic('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>')
 const CERT = ic('<rect x="3.5" y="4.5" width="17" height="12" rx="2"/><path d="M7.5 8.5h9M7.5 11.5h4"/><circle cx="16" cy="14" r="2.4"/>'), WARN = ic('<path d="M12 4 3 19.5h18z"/><path d="M12 10v4.5M12 17h.01"/>'), BARS = ic('<path d="M6 19v-6M12 19V6M18 19v-9"/>'), RELOAD = ic('<path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/>'), GEAR = ic('<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>')
 const SEC = { ok: [LOCK, '', 'Connection is secure'], http: [OPEN, 'bad', 'Not secure'], bad: [OPEN, 'bad', 'Certificate is not valid'], local: [INFO, '', 'Local site'], qat: [INFO, '', 'Qat page'], other: [INFO, '', 'Site info'] }
-let siteData = null
+let siteData = null, siteSeq = 0, siteTab = null, siteUrl = ''
 const day = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 const kv = rows => { const g = mk('div', 'kv'); for (const [k, v] of rows) if (v != null && v !== '' && !Number.isNaN(v)) g.append(mk('span', '', k), mk('span', '', String(v))); return g }
 const srow = (svg, cls, text, sub, click) => { const r = mk(click ? 'button' : 'div', 'srow ' + cls); r.innerHTML = svg; const t = mk('span'); t.append(text); if (sub) t.append(mk('small', '', sub)); r.append(t); if (click) r.onclick = click; return r }
@@ -248,8 +251,19 @@ function paintSite() {
     const left = Math.ceil((d.cert.to - Date.now()) / 864e5)
     sitepop.append(srow(CERT, '', 'Certificate', (d.cert.issuerOrg || d.cert.issuer) + (left < 0 ? ', expired' : ', expires ' + day(d.cert.to)), () => qat.site.view(d.host)))
   } else if (d.err) sitepop.append(srow(CERT, '', 'Certificate', "Couldn't read it"))
-    const delBtn = srow("", "", "Delete cookies for this site", d.cookies ? d.cookies + ' saved' : 'none found', () => { if (!delBtn.disabled) { delBtn.disabled = true; qat.site.delCookies(d.host).then(async r => { const n = r?.removed ?? 0; delBtn.lastChild.replaceChildren(mk('small', '', n ? n + ' deleted, re-login may be needed' : 'none found')); if (n) { siteData = { ...siteData, cookies: 0 }; await new Promise(rs => setTimeout(rs, 900)); paintSite() } else delBtn.disabled = false }) } })
-sitepop.append(delBtn)
+  if (d.url && /^https?:/.test(d.url) && !d.incog) {
+    const delBtn = srow('', '', 'Delete cookies for this site', d.cookies ? d.cookies + ' saved' : 'none found', async () => {
+      if (delBtn.disabled) return
+      delBtn.disabled = true
+      try {
+        const r = await qat.site.delCookies(d.host), n = r?.removed ?? 0
+        delBtn.lastChild.replaceChildren(mk('small', '', r?.error || (n ? n + ' deleted, re-login may be needed' : 'none found')))
+        if (n) { siteData = { ...siteData, cookies: 0 }; setTimeout(paintSite, 900) }
+        else delBtn.disabled = false
+      } catch (e) { delBtn.lastChild.replaceChildren(mk('small', '', e.message)); delBtn.disabled = false }
+    })
+    sitepop.append(delBtn)
+  }
   if (d.url && (d.tls || d.page)) {
     const n = mk('details', 'nerd'), t = d.tls || {}, c = d.cert || {}, p = d.page || {}, ms = v => v ? v + ' ms' : null, s = mk('summary')
     s.innerHTML = BARS
@@ -274,14 +288,19 @@ sitepop.append(delBtn)
 
 setInterval(() => !sitepop.hidden && state.tabs.find(t => t.id === state.activeId)?.risk?.level === 'checking' && paintSite(), 1000) // the seconds counter
 $('#site').onclick = async () => {
-  if (!sitepop.hidden) return openPop(null)
+  if (!sitepop.hidden) { siteSeq++; return openPop(null) }
+  const my = ++siteSeq, cur = state.tabs.find(t => t.id === state.activeId)
+  siteTab = state.activeId
+  siteUrl = cur?.url || ''
   siteData = null
   paintSite()
   openPop(sitepop, $('#site'), true)
-  const d = await qat.site.info()
-  if (sitepop.hidden || !d) return
-  siteData = d
-  paintSite()
+  try {
+    const d = await qat.site.info()
+    if (my !== siteSeq || sitepop.hidden || !d || state.activeId !== siteTab || state.tabs.find(t => t.id === siteTab)?.url !== siteUrl) return
+    siteData = d
+    paintSite()
+  } catch { if (my === siteSeq && !sitepop.hidden) openPop(null) }
 }
 
 function build(v, m, g = []) {

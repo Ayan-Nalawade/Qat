@@ -22,6 +22,7 @@ Qat is mostly developed and tested on windows.
 - Bookmarks. (Ctrl+D or star button). Bookmarks bar and Bookmark folders. Can import bookmarks from chrome.
 - View your history (qat://history). (Ctrl+H). Can search through history. Remove single items or clear all.
 - Chrome extensions. Can import from chrome, or load unpacked. Buttons are pinned to the toolbar.
+- Automatic updates from GitHub releases, with a manual check under Settings.
 - Zoom, full screen, devtools and other standard shortcuts.
 
 ### Ad Blocking
@@ -32,6 +33,7 @@ Qat is mostly developed and tested on windows.
 ### Site Info / Scam Detection
 
 - Click the icon next to the address bar to view connection info, certificate (Opens in windows certificiate viewer), and some nerdy stats.
+- Delete the current website's cookies from the same popup.
 - Scam detection can be enabled. When visiting websites that Qat does not know, it will ask your ai model if the page looks like a phishing attempt, fake shop, fake download etc.
 - Large well-known sites such as Google, Gmail, YouTube, Reddit, GitHub etc will be trusted automatically. No AI call will happen. However, only videos will be checked on YouTube and will be checked individually.
 - If the icon turns red with a '!', then the site looks a little suspicious. If the icon turns red then it is likely a scam.
@@ -98,7 +100,7 @@ Your keys will be encrypted using your OS keychain (Electron SafeStorage). They 
 
 ## Internal Pages
 
-- qat://settings - Configure AI, Ad Blocking, Scam Detection and Reset.
+- qat://settings - Configure AI, Ad Blocking, Scam Detection, Updates and Reset.
 - qat://history
 - qat://bookmarks
 - qat://extensions

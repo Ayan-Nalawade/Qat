@@ -53,13 +53,17 @@ function handshake(host, port) {
 const PAGE = `(() => { const n = performance.getEntriesByType('navigation')[0] || {}, r = v => Math.max(0, Math.round(v || 0)), res = performance.getEntriesByType('resource')
   return { proto: n.nextHopProtocol, dns: r(n.domainLookupEnd - n.domainLookupStart), connect: r(n.connectEnd - n.connectStart), tls: r(n.secureConnectionStart && n.connectEnd - n.secureConnectionStart), ttfb: r(n.responseStart - n.requestStart), dom: r(n.domContentLoadedEventEnd), load: r(n.loadEventEnd), requests: res.length + 1, kb: Math.round((res.reduce((s, e) => s + (e.transferSize || 0), 0) + (n.transferSize || 0)) / 1024) } })()`
 
+const cookieDomain = d => d.replace(/^\./, '')
+const ownsCookie = (host, domain) => { const d = cookieDomain(domain); return !!d && (host === d || host.endsWith('.' + d)) } // parent-domain cookies reach this host too
+const cookiesOf = (session, host) => session.cookies.get({}).then(all => all.filter(c => ownsCookie(host, c.domain)), () => [])
+
 async function info(wc, url, certErr) {
   const u = new URL(url), out = { url, host: u.hostname, sec: sec(url, certErr), certErr, risk: risk(url) }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') return out
   const [h, page, cookies] = await Promise.all([
     u.protocol === 'https:' ? handshake(u.hostname, +u.port || 443).catch(e => ({ err: e.message })) : null,
     Promise.race([wc.executeJavaScriptInIsolatedWorld(1999, [{ code: PAGE }]).catch(() => null), new Promise(r => setTimeout(r, 1500, null))]), // waits for a page still loading otherwise
-    wc.session.cookies.get({ url }).then(c => c.length, () => 0),
+    cookiesOf(wc.session, u.hostname).then(c => c.length),
   ])
   return { ...out, ...h, page, cookies }
 }
@@ -73,16 +77,14 @@ function view(host) {
 }
 
 async function deleteCookies(session, host) {
-  // electron's cookies api has no removeAll, and get({url}) misses cookies saved at a
-  // deeper path, so pull every cookie and keep only this host's: "ex.com" or ".ex.com".
-  // a cookie on sub.dom.com doesn't reach this host, so it stays.
-  const all = await session.cookies.get({}).catch(() => [])
+  // electron has no removeAll, and get({url}) misses cookies saved at a deeper path.
+  const list = await cookiesOf(session, host)
   let killed = 0
-  for (const c of all) {
-    if (c.domain !== host && c.domain !== '.' + host) continue
-    const url = 'https://' + (c.domain.replace(/^\./, '') || host) + (c.path || '/')
+  for (const c of list) {
+    const url = (c.secure ? 'https' : 'http') + '://' + cookieDomain(c.domain) + (c.path || '/')
     try { await session.cookies.remove(url, c.name); killed++ } catch (e) { console.error('[site] cookie stuck: ' + c.name + ' ' + e.message) }
   }
+  await session.cookies.flushStore().catch(() => {})
   return killed
 }
 

@@ -82,14 +82,16 @@ const warm = (u, incog) => { let o; try { o = new URL(u).origin } catch { return
 function sendBm() {
   const items = [], folders = new Map(), other = [], it = ({ url, title, icon }) => ({ url, title, icon })
   for (const b of bm.all()) {
-    if (!b.folder || b.folder === 'Bookmarks bar') items.push(it(b))
-    else if (b.folder.startsWith('Bookmarks bar/')) {
+    if (b.folder?.startsWith('Bookmarks bar/')) {
       const n = b.folder.slice(14).split('/')[0]
       if (!folders.has(n)) items.push(folders.set(n, { name: n, items: [] }).get(n))
-      folders.get(n).items.push(it(b))
-    } else other.push(it(b))
+      if (b.url !== '__FOLDER__') folders.get(n).items.push(it(b))
+    } else if (b.url !== '__FOLDER__') {
+      if (!b.folder || b.folder === 'Bookmarks bar') items.push(it(b))
+      else other.push(it(b))
+    }
   }
-  toBar('bookmarks', { show: conf('bookmarksBar') !== false && bm.all().length > 0, items, other })
+  toBar('bookmarks', { show: conf('bookmarksBar') !== false && (items.length > 0 || other.length > 0), items, other })
 }
 const sendExts = () => toBar('exts', ext.list().filter(x => x.on).map(({ id, name, icon, pin, popup, options }) => ({ id, name, icon, pin, popup: !!(popup || options) })))
 
@@ -398,6 +400,8 @@ function createWindow() {
   })
   newTab(HOME, false, wantIncog) // wantIncog is set when the taskbar jump list launched an incognito window
   wantIncog = false
+  meter()
+  timers.push(setInterval(meter, 5000), setInterval(sleepTabs, 30000))
 }
 
 ipcMain.on('tab:new', (e, url) => newTab(url, false, ctxTab(e)?.incog)) // a new tab inherits the incognito-ness of the page that asked for it
@@ -433,6 +437,7 @@ qh('bm:import', d => { const n = bm.add(chrome.bookmarks(d)); sendTabs(); sendBm
 qh('bm:create-folder', (name) => { const n = bm.createFolder(name); sendTabs(); sendBm(); return n })
 qh('bm:move', (url, folder) => { bm.move(url, folder); sendTabs(); sendBm() })
 qh('scam:get', () => scam)
+qh('scam:set', v => { scam = !!v; conf('scamCheck', scam); return scam })
 ipcMain.handle('site:info', async e => { const t = active(); return e.sender === bar.webContents && t.view ? { ...await site.info(t.view.webContents, t.url, t.certErr), scam, ai: ready(), incog: !!t.incog } : null })
 ipcMain.on('site:view', (e, host) => e.sender === bar.webContents && !active()?.incog && site.view(host)) // never write an incognito host to disk
 ipcMain.handle('site:del-cookies', async (e, host) => { const t = active(); if (e.sender !== bar.webContents || !t || t.incog) return { error: 'no tab' }; return { removed: await site.deleteCookies(t.view.webContents.session, host) } })
@@ -464,7 +469,7 @@ ipcMain.handle('updater:check', async () => {
   if (!autoUpdater) return updErr()
   try {
     const result = await autoUpdater.checkForUpdates()
-    return { available: !!result?.updateInfo }
+    return { available: !!result?.isUpdateAvailable }
   } catch (e) {
     console.error('[updater] Check failed:', e)
     return { error: e.message }
@@ -568,7 +573,7 @@ app.whenReady().then(async () => {
   block.start(() => countTimer ||= setTimeout(() => { countTimer = null; sendTabs() }, 400))
   
   // Check for updates after window is created
-  if (autoUpdater) autoUpdater.checkForUpdates()
+  if (autoUpdater) autoUpdater.checkForUpdates().catch(e => console.error('[updater] Check failed:', e))
 })
 app.on('before-quit', () => {
   timers.forEach(clearInterval)

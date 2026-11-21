@@ -6,8 +6,8 @@ let dragSrc = null
 async function draw() {
   all = await qat.bm.list()
   const folders = [...new Set(all.map(b => b.folder).filter(Boolean))].sort()
-  const q = $('#q').value.trim().toLowerCase(), groups = new Map(), list = $('#list')
-  for (const b of all) if (!q || (b.title + ' ' + b.url).toLowerCase().includes(q)) (groups.get(b.folder) || groups.set(b.folder, []).get(b.folder)).push(b)
+  const q = $('#q').value.trim().toLowerCase(), groups = new Map(folders.filter(f => !q || f.toLowerCase().includes(q)).map(f => [f, []])), list = $('#list')
+  for (const b of all) if (b.url !== '__FOLDER__' && (!q || (b.title + ' ' + b.url).toLowerCase().includes(q))) (groups.get(b.folder) || groups.set(b.folder, []).get(b.folder)).push(b)
   list.innerHTML = ''
   if (!groups.size) return list.append(Object.assign(el('div', 'box'), { innerHTML: '<div class="empty">' + (all.length ? 'Nothing matches' : 'No bookmarks yet. Press Ctrl+D or the star in the address bar to add one.') + '</div>' }))
   for (const [f, items] of groups) {
@@ -36,7 +36,7 @@ async function draw() {
       a.href = b.url
       a.append(el('b', 'url', b.title), el('small', 'url', b.url))
       const folderSel = el('select', 'folder-sel')
-      folderSel.innerHTML = '<option value="">(none)</option>' + folders.map(ff => `<option value="${ff}"${ff === b.folder ? ' selected' : ''}>${ff}</option>`).join('')
+      folderSel.append(new Option('(none)', ''), ...folders.map(ff => new Option(ff, ff, false, ff === b.folder)))
       folderSel.onchange = async () => {
         await qat.bm.move(b.url, folderSel.value)
         draw()
